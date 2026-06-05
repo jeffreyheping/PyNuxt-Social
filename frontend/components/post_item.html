@@ -1,0 +1,22 @@
+{# 单条帖子组件 #}
+<div class="post-item">
+    <div class="post-header">
+        <a href="/users/{{ post.author.username }}" class="post-author">{{ post.author.display_name or post.author.username }}</a>
+        <span class="post-time">{{ post.created_at[:16] if post.created_at else '' }}</span>
+    </div>
+    <div class="post-content">{{ post.content }}</div>
+    <div class="post-actions">
+        <span id="like-btn-{{ post.id }}">
+            {% if current_user_id %}
+            <button class="like-btn {% if post.liked_by_me %}liked{% endif %}"
+                    hx-post="/bff/posts/{{ post.id }}/like"
+                    hx-target="#like-btn-{{ post.id }}"
+                    hx-swap="outerHTML">
+                ❤ {{ post.like_count }}
+            </button>
+            {% else %}
+            <span class="like-btn">❤ {{ post.like_count }}</span>
+            {% endif %}
+        </span>
+    </div>
+</div>

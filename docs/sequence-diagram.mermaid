@@ -1,0 +1,88 @@
+sequenceDiagram
+    participant Browser
+    participant Frontend as Frontend (BFF :3000)
+    participant Backend as Backend API (:8012)
+    participant DB as SQLite
+
+    %% 登录流程
+    rect rgb(230, 245, 255)
+    Note over Browser,DB: 用户登录
+    Browser->>Frontend: POST /bff/auth/login {username, password}
+    Frontend->>Backend: POST /api/auth/login {username, password}
+    Backend->>DB: SELECT * FROM users WHERE username=?
+    DB-->>Backend: User row
+    Backend->>Backend: verify_password + create_access_token
+    Backend-->>Frontend: {access_token, user}
+    Frontend-->>Browser: 200 Set-Cookie: auth_token=jwt; HX-Redirect: /feed
+    end
+
+    %% 加载动态流
+    rect rgb(230, 255, 230)
+    Note over Browser,DB: 加载动态流
+    Browser->>Frontend: GET /feed (整页导航)
+    Frontend->>Frontend: 渲染 feed.html (pages路由)
+    Frontend-->>Browser: 完整 HTML 页面
+    Browser->>Frontend: GET /bff/posts?feed=global (hx-trigger=load)
+    Frontend->>Backend: GET /api/posts?feed=global
+    Backend->>DB: SELECT posts JOIN users ORDER BY created_at DESC
+    DB-->>Backend: Post rows
+    Backend->>DB: SELECT COUNT(*) FROM likes WHERE post_id=?
+    Backend->>DB: SELECT * FROM likes WHERE user_id=? AND post_id=?
+    Backend-->>Frontend: [{id, author, content, like_count, liked_by_me}]
+    Frontend->>Frontend: _render("post_list.html", data=posts)
+    Frontend-->>Browser: HTML 片段 → 替换 #post-list
+    end
+
+    %% 点赞 Toggle
+    rect rgb(255, 245, 230)
+    Note over Browser,DB: 点赞/取消赞
+    Browser->>Frontend: POST /bff/posts/5/like (hx-post)
+    Frontend->>Backend: POST /api/posts/5/like (Bearer token)
+    Backend->>DB: SELECT * FROM likes WHERE user_id=? AND post_id=?
+    alt 未点赞
+        Backend->>DB: INSERT INTO likes (user_id, post_id)
+        Backend-->>Frontend: {liked: true, like_count: 4}
+    else 已点赞
+        Backend->>DB: DELETE FROM likes WHERE user_id=? AND post_id=?
+        Backend-->>Frontend: {liked: false, like_count: 3}
+    end
+    Frontend->>Frontend: _render("like_button.html", liked, like_count)
+    Frontend-->>Browser: HTML 片段 → 替换 #like-btn-5
+    end
+
+    %% 好友请求
+    rect rgb(255, 230, 245)
+    Note over Browser,DB: 发送好友请求
+    Browser->>Frontend: POST /bff/friends/requests/bob
+    Frontend->>Backend: POST /api/friends/requests/bob (Bearer token)
+    Backend->>DB: SELECT * FROM users WHERE username='bob'
+    Backend->>DB: SELECT * FROM friend_requests WHERE from_user_id=? AND to_user_id=?
+    Backend->>DB: INSERT INTO friend_requests (from_user_id, to_user_id, status='pending')
+    Backend-->>Frontend: {id, from_user_id, to_user_id, status: "pending"}
+    Frontend->>Frontend: _render("friend_button.html", status="pending")
+    Frontend-->>Browser: HTML 片段 → 替换 #friend-btn
+    end
+
+    %% 接受好友请求
+    rect rgb(245, 240, 255)
+    Note over Browser,DB: 接受好友请求
+    Browser->>Frontend: PUT /bff/friends/requests/3 {action: accept}
+    Frontend->>Backend: PUT /api/friends/requests/3 (Bearer token)
+    Backend->>DB: SELECT * FROM friend_requests WHERE id=3
+    Backend->>DB: UPDATE friend_requests SET status='accepted' WHERE id=3
+    Backend-->>Frontend: {id: 3, status: "accepted"}
+    Frontend->>Frontend: _render("friend_request_item.html", status="accepted")
+    Frontend-->>Browser: HTML 片段 → 替换 #request-3
+    end
+
+    %% 用户搜索
+    rect rgb(240, 255, 255)
+    Note over Browser,DB: 用户搜索
+    Browser->>Frontend: GET /bff/users/search?q=ali (hx-trigger=input, delay:300ms)
+    Frontend->>Backend: GET /api/users?q=ali
+    Backend->>DB: SELECT * FROM users WHERE username LIKE '%ali%' OR display_name LIKE '%ali%'
+    DB-->>Backend: User rows
+    Backend-->>Frontend: [{id, username, display_name}]
+    Frontend->>Frontend: _render("search_results.html", data=users)
+    Frontend-->>Browser: HTML 片段 → 替换 #search-results
+    end

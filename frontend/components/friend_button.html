@@ -1,0 +1,24 @@
+{# 好友关系按钮组件 — 五态 #}
+{# self / none / pending / pending_received / accepted / rejected #}
+<span id="friend-btn" class="friend-btn">
+    {% if status == "self" %}
+    {# 自己，不显示按钮 #}
+    {% elif status == "accepted" %}
+    <span class="btn btn-sm btn-success">已好友 ✓</span>
+    {% elif status == "pending" %}
+    <span class="btn btn-sm" style="background:#fff3e0;color:#e65100;border-color:#ffe0b2;">已申请...</span>
+    {% elif status == "pending_received" %}
+    <span class="btn btn-sm" style="background:#e3f2fd;color:#1565c0;border-color:#bbdefb;">待你处理</span>
+    {% elif status == "rejected" %}
+    <button class="btn btn-sm btn-danger"
+            hx-post="/bff/friends/requests/{{ username }}"
+            hx-target="#friend-btn"
+            hx-swap="outerHTML">重新申请</button>
+    {% else %}
+    {# none #}
+    <button class="btn btn-sm btn-primary"
+            hx-post="/bff/friends/requests/{{ username }}"
+            hx-target="#friend-btn"
+            hx-swap="outerHTML">加好友</button>
+    {% endif %}
+</span>

@@ -1,0 +1,11 @@
+{# 用户卡片组件（粉丝/关注列表共用） #}
+{% for user in data %}
+<div class="user-card">
+    <div class="user-card-info">
+        <a href="/users/{{ user.username }}" class="user-card-name">{{ user.display_name or user.username }}</a>
+        <span class="user-card-username">@{{ user.username }}</span>
+    </div>
+</div>
+{% else %}
+<div class="empty-state"><p>暂无{{ list_type }}</p></div>
+{% endfor %}

@@ -1,0 +1,24 @@
+{% extends "layouts/default.html" %}
+{% block title %}登录 - {{ site_name }}{% endblock %}
+{% block body %}
+<div class="auth-container">
+    <div class="auth-card">
+        <h2>登录</h2>
+        <div id="auth-message"></div>
+        <form hx-post="/bff/auth/login" hx-target="#auth-message">
+            <div class="form-group">
+                <label>用户名</label>
+                <input type="text" name="username" required>
+            </div>
+            <div class="form-group">
+                <label>密码</label>
+                <input type="password" name="password" required>
+            </div>
+            <button type="submit" class="btn btn-primary btn-block">登录</button>
+        </form>
+        <div class="auth-footer">
+            没有账号？<a href="/register">注册</a>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,10 @@
+{% extends "layouts/default.html" %}
+{% block title %}好友请求 - {{ site_name }}{% endblock %}
+{% block body %}
+<h3 style="margin-bottom:16px;">好友请求</h3>
+<div class="card">
+    <div id="friend-requests" hx-get="/bff/friends/requests" hx-trigger="load">
+        <div class="loading">加载中...</div>
+    </div>
+</div>
+{% endblock %}

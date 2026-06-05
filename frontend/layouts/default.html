@@ -1,0 +1,34 @@
+{# 默认布局 — 等同 Nuxt layouts/default.vue #}
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}{{ site_name }}{% endblock %}</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <script src="/static/js/htmx.min.js"></script>
+    {% block head %}{% endblock %}
+</head>
+<body>
+    {# 导航栏 #}
+    <nav class="navbar">
+        <div class="nav-brand">
+            <a href="/feed">{{ site_name }}</a>
+        </div>
+        <div class="nav-links">
+            {% if current_user %}
+            <a href="/feed">动态</a>
+            <a href="/search">搜索</a>
+            <a href="/friends">好友</a>
+            {% endif %}
+        </div>
+        <div class="nav-auth" id="nav-auth">
+            <div id="auth-status" hx-get="/bff/auth/status" hx-trigger="load"></div>
+        </div>
+    </nav>
+    <div class="container">
+        {% block body %}{% endblock %}
+    </div>
+    {% block scripts %}{% endblock %}
+</body>
+</html>

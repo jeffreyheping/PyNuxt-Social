@@ -1,0 +1,9 @@
+{# 点赞按钮组件（HTMX toggle） #}
+<span id="like-btn-{{ post_id }}">
+    <button class="like-btn {% if liked %}liked{% endif %}"
+            hx-post="/bff/posts/{{ post_id }}/like"
+            hx-target="#like-btn-{{ post_id }}"
+            hx-swap="outerHTML">
+        ❤ {{ like_count }}
+    </button>
+</span>

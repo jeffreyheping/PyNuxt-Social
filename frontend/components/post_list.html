@@ -1,0 +1,6 @@
+{# 帖子列表组件 — 循环渲染 post_item #}
+{% for post in data %}
+{% include "components/post_item.html" %}
+{% else %}
+<div class="empty-state"><p>暂无动态</p></div>
+{% endfor %}

@@ -1,0 +1,8 @@
+{# 导航栏登录状态片段 #}
+{% if user %}
+<span class="user-info">{{ user.display_name or user.username }}</span>
+<button class="btn btn-sm" hx-post="/bff/auth/logout" hx-swap="none">登出</button>
+{% else %}
+<a href="/login" class="btn btn-primary btn-sm">登录</a>
+<a href="/register" class="btn btn-sm">注册</a>
+{% endif %}

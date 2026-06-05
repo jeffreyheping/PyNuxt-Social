@@ -1,0 +1,12 @@
+{% extends "layouts/default.html" %}
+{% block title %}{{ site_name }}{% endblock %}
+{% block body %}
+<div class="hero">
+    <h1>{{ site_name }}</h1>
+    <p>轻量级社交平台 — 纯 SSR，零 JavaScript</p>
+    <div class="hero-actions">
+        <a href="/feed" class="btn btn-primary">进入动态流</a>
+        <a href="/login" class="btn">登录</a>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,25 @@
+{# 好友请求列表组件 #}
+{% if data %}
+{% for req in data %}
+<div class="friend-request-item" id="request-{{ req.id }}">
+    <div>
+        <a href="/users/{{ req.from_user.username }}" class="user-card-name">{{ req.from_user.display_name or req.from_user.username }}</a>
+        <span class="post-time">{{ req.created_at[:16] if req.created_at else '' }}</span>
+    </div>
+    <div class="friend-request-actions">
+        <button class="btn btn-sm btn-success"
+                hx-put="/bff/friends/requests/{{ req.id }}"
+                hx-vals='{"action":"accept"}'
+                hx-target="#friend-requests"
+                hx-swap="innerHTML">接受</button>
+        <button class="btn btn-sm btn-danger"
+                hx-put="/bff/friends/requests/{{ req.id }}"
+                hx-vals='{"action":"reject"}'
+                hx-target="#friend-requests"
+                hx-swap="innerHTML">拒绝</button>
+    </div>
+</div>
+{% endfor %}
+{% else %}
+<div class="empty-state"><p>暂无待处理请求</p></div>
+{% endif %}

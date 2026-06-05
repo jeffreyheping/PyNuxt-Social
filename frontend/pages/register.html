@@ -1,0 +1,32 @@
+{% extends "layouts/default.html" %}
+{% block title %}注册 - {{ site_name }}{% endblock %}
+{% block body %}
+<div class="auth-container">
+    <div class="auth-card">
+        <h2>注册</h2>
+        <div id="auth-message"></div>
+        <form hx-post="/bff/auth/register" hx-target="#auth-message">
+            <div class="form-group">
+                <label>用户名</label>
+                <input type="text" name="username" required>
+            </div>
+            <div class="form-group">
+                <label>邮箱</label>
+                <input type="email" name="email" required>
+            </div>
+            <div class="form-group">
+                <label>昵称（可选）</label>
+                <input type="text" name="display_name">
+            </div>
+            <div class="form-group">
+                <label>密码</label>
+                <input type="password" name="password" required minlength="6">
+            </div>
+            <button type="submit" class="btn btn-primary btn-block">注册</button>
+        </form>
+        <div class="auth-footer">
+            已有账号？<a href="/login">登录</a>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,17 @@
+{% extends "layouts/default.html" %}
+{% block title %}搜索 - {{ site_name }}{% endblock %}
+{% block body %}
+<div class="card">
+    <div class="card-body">
+        <form class="search-form" hx-get="/bff/users/search" hx-target="#search-results" hx-trigger="keyup changed delay:300ms" hx-include="[name='q']">
+            <input type="text" name="q" placeholder="搜索用户..." autofocus>
+        </form>
+    </div>
+</div>
+
+<div class="card">
+    <div id="search-results">
+        <div class="empty-state"><p>输入关键词搜索用户</p></div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,17 @@
+{# 搜索结果组件 #}
+{% for user in data %}
+<div class="user-card">
+    <div class="user-card-info">
+        <a href="/users/{{ user.username }}" class="user-card-name">{{ user.display_name or user.username }}</a>
+        <span class="user-card-username">@{{ user.username }}</span>
+    </div>
+    <div id="friend-btn-{{ user.username }}">
+        <button class="btn btn-sm btn-primary"
+                hx-post="/bff/friends/requests/{{ user.username }}"
+                hx-target="#friend-btn-{{ user.username }}"
+                hx-swap="outerHTML">加好友</button>
+    </div>
+</div>
+{% else %}
+<div class="empty-state"><p>未找到匹配用户</p></div>
+{% endfor %}

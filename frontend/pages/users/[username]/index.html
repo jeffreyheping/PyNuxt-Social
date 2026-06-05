@@ -1,0 +1,15 @@
+{% extends "layouts/default.html" %}
+{% block title %}{{ username }} - {{ site_name }}{% endblock %}
+{% block body %}
+{# 用户信息 header（HTMX 局部加载） #}
+<div class="profile-header" hx-get="/bff/users/{{ username }}/profile" hx-trigger="load">
+    <div class="loading">加载中...</div>
+</div>
+
+{# 用户帖子列表 #}
+<div class="card">
+    <div id="post-list" hx-get="/bff/users/{{ username }}/posts" hx-trigger="load">
+        <div class="loading">加载中...</div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,45 @@
+classDiagram
+    direction LR
+
+    class User {
+        +int id PK
+        +str username UK
+        +str email UK
+        +str display_name
+        +str password_hash
+        +datetime created_at
+    }
+
+    class Post {
+        +int id PK
+        +int author_id FK
+        +str content
+        +datetime created_at
+    }
+
+    class Like {
+        +int id PK
+        +int user_id FK
+        +int post_id FK
+    }
+
+    class FriendRequest {
+        +int id PK
+        +int from_user_id FK
+        +int to_user_id FK
+        +str status
+        +datetime created_at
+        +datetime updated_at
+    }
+
+    User "1" --> "*" Post : author
+    User "1" --> "*" Like : liker
+    Post "1" --> "*" Like : likes
+    User "1" --> "*" FriendRequest : sent_requests
+    User "1" --> "*" FriendRequest : received_requests
+
+    Like ..> UniqueConstraint : uq_like_user_post
+    FriendRequest ..> UniqueConstraint : uq_friend_request
+
+    note for Like "UNIQUE(user_id, post_id)"
+    note for FriendRequest "UNIQUE(from_user_id, to_user_id)\nstatus: pending | accepted | rejected"

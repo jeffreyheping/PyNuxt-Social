@@ -1,0 +1,11 @@
+{# 用户主页 header 组件 #}
+<h2>{{ data.display_name or data.username }}</h2>
+<div class="profile-username">@{{ data.username }}</div>
+<div class="profile-stats">
+    <a href="/users/{{ data.username }}" class="profile-stat"><strong>{{ data.post_count }}</strong> 帖子</a>
+    <a href="/users/{{ data.username }}/followers" class="profile-stat"><strong>{{ data.follower_count }}</strong> 粉丝</a>
+    <a href="/users/{{ data.username }}/following" class="profile-stat"><strong>{{ data.following_count }}</strong> 关注</a>
+</div>
+{% if current_user_id and current_user_id != data.id %}
+<div class="profile-actions" id="friend-btn" hx-get="/bff/friends/status/{{ data.username }}" hx-trigger="load"></div>
+{% endif %}

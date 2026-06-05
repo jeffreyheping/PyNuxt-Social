@@ -1,0 +1,10 @@
+{% extends "layouts/default.html" %}
+{% block title %}{{ username }} 的粉丝 - {{ site_name }}{% endblock %}
+{% block body %}
+<h3 style="margin-bottom:16px;"><a href="/users/{{ username }}">{{ username }}</a> 的粉丝</h3>
+<div class="card">
+    <div id="followers-list" hx-get="/bff/users/{{ username }}/followers" hx-trigger="load">
+        <div class="loading">加载中...</div>
+    </div>
+</div>
+{% endblock %}
