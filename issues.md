@@ -319,6 +319,43 @@ def PostItem(post, current_user_id=None):
     )
 ```
 
+#### P3-6: BFF ↔ 后端 REST 通信优化
+
+**前提**：REST 是多端复用的最优通信协议（gRPC/GraphQL 均不适用，详见下方分析），无需更换协议。
+
+**优化项**（5 分钟搞定）：
+
+1. **启用 HTTP/2 多路复用**：多个请求复用同一 TCP 连接
+```bash
+pip install httpx[http2]
+```
+```python
+# frontend/pynuxt/auth.py / bff.py
+_shared_client = httpx.AsyncClient(http2=True)
+```
+
+2. **后端启用 Gzip 压缩**：JSON 响应体积减少 60-80%
+```python
+# backend/main.py
+from fastapi.middleware.gzip import GZipMiddleware
+app.add_middleware(GZipMiddleware, minimum_size=1000)
+```
+
+3. **内网通信跳过 DNS**：`localhost` → `127.0.0.1`
+```python
+# frontend/config.py
+API_BASE = "http://127.0.0.1:8012"
+```
+
+**为什么不用 gRPC/GraphQL？**
+
+| 方案 | 不适用原因 |
+|------|----------|
+| gRPC | 需同时运行 FastAPI + gRPC Server 两套服务，复杂度翻倍；移动端接入成本高 |
+| GraphQL | BFF 已承担数据裁剪角色；N+1 问题更严重；需换后端框架 |
+| WebSocket | 仅实时场景有用（私信/通知），可与 REST 共存，但不能替代 |
+| tRPC | 仅 TypeScript，不适用 |
+
 ---
 
 ## 三、参考 FastBlocks 的改进建议（第三阶段）
@@ -370,3 +407,4 @@ def PostItem(post, current_user_id=None):
 - [ ] 添加响应压缩
 - [ ] 重构中间件架构
 - [ ] 用 Python 函数（类似 fasthtml FastTags）重构 components
+- [ ] BFF ↔ 后端 REST 通信优化（HTTP/2 + Gzip + 跳过 DNS）
