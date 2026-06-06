@@ -375,11 +375,51 @@ class FeedBFF(BFFBase):
 - 模板渲染（`self._render`）
 - 创建后刷新列表（`refresh="list"` 自动重新调用 list action）
 
+**扩展性设计：声明式 + 命令式共存**
+
+CrudAction 不影响扩展性，因为它是**可选的**，三种模式可在同一个 BFF 类里混用：
+
+```
+第 1 层：纯声明式（覆盖 80% 场景）
+  list = CrudAction(backend=..., template=..., auth=...)
+
+第 2 层：声明式 + 钩子（覆盖 15% 场景）
+  list = CrudAction(
+      backend=...,
+      before_request=...,   # 请求前转换参数
+      after_response=...,   # 响应后追加模板变量
+      on_error=...,         # 自定义错误处理
+  )
+
+第 3 层：命令式（覆盖 5% 场景，如 Cookie 操作）
+  @post("", auth="required")
+  async def create_post(self, ...):
+      ...  # 完全自定义
+```
+
+示例：声明式与命令式混用
+```python
+class FeedBFF(BFFBase):
+    prefix = "/bff/posts"
+
+    # 标准场景：声明式
+    list = CrudAction(backend="/api/posts", template="components/post_list.html", auth="optional")
+    like = CrudAction(backend="/api/posts/{post_id}/like", template="components/like_button.html", auth="token")
+
+    # 特殊场景：命令式（发帖后需要自定义刷新逻辑）
+    @post("", auth="required")
+    async def create_post(self, content: str = Form(...), feed: str = Query("global")):
+        await self._post("/api/posts", {"content": content})
+        posts = await self._get("/api/posts", params={"feed": feed})
+        return self._render("components/post_list.html", data=posts, current_user_id=self.current_user_id, current_feed=feed)
+```
+
 **收益**：
 - FeedBFF 从 ~40 行降到 ~15 行
 - FriendBFF 从 ~30 行降到 ~12 行
 - 新增 CRUD 时 BFF 代码量减半
 - 统一模式，减少出错
+- 不影响扩展性：声明式搞不定的场景随时退回命令式
 
 ---
 
