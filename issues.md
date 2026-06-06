@@ -12,7 +12,7 @@
 
 | 阶段 | 目标 | 关键任务 |
 |------|------|---------|
-| **第一阶段：稳定性** | 修复生产问题，替换不可靠依赖 | N+1 查询、datetime 弃用、JWT 替换、配置管理 |
+| **第一阶段：稳定性** | 修复生产问题，替换不可靠依赖 | N+1 查询、datetime 弃用、配置管理 |
 | **第二阶段：体验优化** | 提升开发体验和用户体验 | 引入 Alpine.js、修复 Feed Tab 同步、环境变量 |
 | **第三阶段：框架升级** | 参考 FastBlocks 改进框架 | CSRF 中间件、HTMX 响应类、响应压缩 |
 
@@ -86,44 +86,11 @@ expire = datetime.now(timezone.utc) + timedelta(hours=JWT_EXPIRATION_HOURS)
 
 ---
 
-#### P0-3: 手写 JWT → 替换为 PyJWT
-
-**位置**：[frontend/pynuxt/auth.py](frontend/pynuxt/auth.py)
-
-**问题**：
-- `datetime.utcnow()` 弃用警告
-- 算法单一（仅 HS256）
-- 异常处理简陋
-- 无 RFC 7519 完整验证
-
-**替换方案**：`pip install PyJWT`
-
-```python
-import jwt
-from datetime import datetime, timedelta, timezone
-
-SECRET_KEY = os.environ.get("JWT_SECRET")
-ALGORITHM = "HS256"
-
-def create_access_token(data: dict) -> str:
-    to_encode = data.copy()
-    expire = datetime.now(timezone.utc) + timedelta(hours=24)
-    to_encode.update({"exp": expire, "iat": datetime.now(timezone.utc)})
-    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
-
-def verify_token(token: str) -> dict:
-    try:
-        return jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-    except jwt.ExpiredSignatureError:
-        raise HTTPException(status_code=401, detail="Token expired")
-    except jwt.InvalidTokenError:
-        raise HTTPException(status_code=401, detail="Invalid token")
-```
-
-**注意**：[backend/routers/auth.py](backend/routers/auth.py) 已使用 `python-jose`（成熟方案），保持不变。
+**说明**：
+- 后端已使用 `python-jose`（FastAPI 官方推荐方案），无需改动
+- 前端并未手写 JWT encode/decode，只是转发 token 给后端验证，无需替换
 
 ---
-
 ### P1 — 强烈建议修复（影响正确性/安全性/体验）
 
 #### P1-1: 公开 API 泄漏用户邮箱
@@ -357,7 +324,6 @@ DEBUG=True
 
 - [ ] 修复 N+1 查询问题
 - [ ] 替换 `datetime.utcnow()` 为 `datetime.now(timezone.utc)`
-- [ ] 前端 JWT 替换为 PyJWT
 - [ ] 配置管理替换为 pydantic-settings
 
 ### 第二阶段：体验优化（1-2 天）
