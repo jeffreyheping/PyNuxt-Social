@@ -191,3 +191,68 @@ async def create_post(self, content: str = Form(...), feed: str = Query("global"
 | P1-3 | 模块级全局变量 | auth.py | 中 |
 | P2-1 | 参数来源不一致 | bff_core.py | 小 |
 | P2-2 | followers/following | users.py | 小 |
+
+---
+
+## 参考 FastBlocks 的改进建议（非必选，值得借鉴）
+
+通过分析 `fastblocks` 仓库，发现以下特性可以提升 PyNuxt 框架：
+
+### 参考 1: HTMX 集成模块（推荐优先）
+
+**来源**：[fastblocks/htmx.py](https://github.com/lesleslie/fastblocks/blob/main/fastblocks/htmx.py)
+
+**借鉴内容**：
+- `HtmxDetails` 类：封装 HTMX 请求头读取
+- `HtmxResponse` 类：支持设置所有 HTMX 响应头（hx-trigger, hx-retarget, hx-push-url 等）
+- 便捷函数：`htmx_redirect()`, `htmx_refresh()`, `htmx_push_url()`, `htmx_retarget()`
+
+**如何应用**：
+在 `frontend/pynuxt/` 下新增 `htmx.py`，简化 BFF 中的 HTMX 响应处理。
+
+---
+
+### 参考 2: 中间件架构（推荐）
+
+**来源**：[fastblocks/middleware.py](https://github.com/lesleslie/fastblocks/blob/main/fastblocks/middleware.py)
+
+**借鉴内容**：
+- `MiddlewarePosition` 枚举：用枚举规范中间件加载顺序（CSRF → SESSION → HTMX → ...）
+- `HtmxMiddleware`：在 scope 中注入 HTMX 详情
+- `MiddlewareStackManager`：集中管理中间件注册
+- `CSRFMiddleware`：添加 CSRF 防护（当前你的项目缺少这个，D12 已标注）
+- `SecureHeadersMiddleware`：自动注入安全头
+- `BrotliMiddleware`：响应压缩
+
+---
+
+### 参考 3: 模板块渲染系统
+
+**来源**：[fastblocks/adapters/templates/_block_renderer.py](https://github.com/lesleslie/fastblocks/blob/main/fastblocks/adapters/templates/_block_renderer.py)
+
+**借鉴内容**：
+- `BlockDefinition`：定义可独立渲染的模板块
+- `BlockRenderRequest`：块渲染请求对象
+- `BlockUpdateMode` 枚举：REPLACE/APPEND/PREPEND/INNER/OUTER/DELETE
+
+---
+
+### 参考 4: Actions 模式（值得参考）
+
+**来源**：[fastblocks/actions/](https://github.com/lesleslie/fastblocks/tree/main/fastblocks/actions)
+
+**借鉴内容**：
+- 语义化工具类：`gather`, `sync`, `minify`, `query`
+- `minify` 动作：自动压缩 HTML/CSS/JS
+- `gather` 动作：自动发现组件、路由、中间件
+
+---
+
+### 优先借鉴清单
+
+| 项 | 优先级 | 来源 | 收益 |
+|----|-------|------|------|
+| CSRF 中间件 | 高 | fastblocks/middleware.py | 提升安全性 |
+| HtmxResponse 类 | 高 | fastblocks/htmx.py | 简化 HTMX 响应处理 |
+| 响应压缩 | 中 | fastblocks/middleware.py | 提升加载速度 |
+| 中间件顺序枚举 | 中 | fastblocks/middleware.py | 规范代码架构 |
