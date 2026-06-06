@@ -319,7 +319,71 @@ def PostItem(post, current_user_id=None):
     )
 ```
 
-#### P3-6: BFF ↔ 后端 REST 通信优化
+#### P3-6: BFF 声明式路由（减少 50% BFF 代码）
+
+**位置**：[frontend/bff_core.py](frontend/bff_core.py)
+
+**问题**：每个 BFF 方法都是"调后端 API → 渲染模板"的固定模式，但每次手写，代码重复度高。
+
+**当前写法**（每个方法 ~15 行）：
+```python
+class FeedBFF(BFFBase):
+    prefix = "/bff/posts"
+
+    @get("", auth="optional")
+    async def get_posts(self, feed: str = Query("global")):
+        posts = await self._get("/api/posts", params={"feed": feed})
+        return self._render("components/post_list.html", data=posts, current_user_id=self.current_user_id, current_feed=feed)
+
+    @post("", auth="required")
+    async def create_post(self, content: str = Form(...), feed: str = Query("global")):
+        await self._post("/api/posts", {"content": content})
+        posts = await self._get("/api/posts", params={"feed": feed})
+        return self._render("components/post_list.html", data=posts, current_user_id=self.current_user_id, current_feed=feed)
+
+    @post("/{post_id}/like", auth="token")
+    async def toggle_like(self, post_id: int):
+        result = await self._post(f"/api/posts/{post_id}/like", {})
+        return self._render("components/like_button.html", post_id=post_id, liked=result["liked"], like_count=result["like_count"])
+```
+
+**声明式写法**（每个动作 3 行）：
+```python
+class FeedBFF(BFFBase):
+    prefix = "/bff/posts"
+
+    list = CrudAction(
+        backend="/api/posts",
+        template="components/post_list.html",
+        auth="optional",
+    )
+    create = CrudAction(
+        backend="/api/posts",
+        refresh="list",  # 创建后自动刷新列表
+        auth="required",
+    )
+    like = CrudAction(
+        backend="/api/posts/{post_id}/like",
+        template="components/like_button.html",
+        auth="token",
+    )
+```
+
+**CrudAction 自动生成**：
+- 路由方法（`@get`/`@post`/`@put`/`@delete`）
+- 后端 API 调用（`self._get`/`self._post`）
+- 模板渲染（`self._render`）
+- 创建后刷新列表（`refresh="list"` 自动重新调用 list action）
+
+**收益**：
+- FeedBFF 从 ~40 行降到 ~15 行
+- FriendBFF 从 ~30 行降到 ~12 行
+- 新增 CRUD 时 BFF 代码量减半
+- 统一模式，减少出错
+
+---
+
+#### P3-7: BFF ↔ 后端 REST 通信优化
 
 **前提**：REST 是多端复用的最优通信协议（gRPC/GraphQL 均不适用，详见下方分析），无需更换协议。
 
@@ -407,4 +471,5 @@ API_BASE = "http://127.0.0.1:8012"
 - [ ] 添加响应压缩
 - [ ] 重构中间件架构
 - [ ] 用 Python 函数（类似 fasthtml FastTags）重构 components
+- [ ] BFF 声明式路由（CrudAction 模式，减少 50% BFF 代码）
 - [ ] BFF ↔ 后端 REST 通信优化（HTTP/2 + Gzip + 跳过 DNS）
