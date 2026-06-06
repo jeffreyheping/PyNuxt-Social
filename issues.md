@@ -256,3 +256,104 @@ async def create_post(self, content: str = Form(...), feed: str = Query("global"
 | HtmxResponse 类 | 高 | fastblocks/htmx.py | 简化 HTMX 响应处理 |
 | 响应压缩 | 中 | fastblocks/middleware.py | 提升加载速度 |
 | 中间件顺序枚举 | 中 | fastblocks/middleware.py | 规范代码架构 |
+
+---
+
+## 第三方库替换建议（手搓 vs 第三方）
+
+### 可替换：JWT → PyJWT（强烈推荐）
+
+**现状**：[frontend/pynuxt/auth.py](frontend/pynuxt/auth.py) 手写 JWT 实现
+
+**问题**：
+- `datetime.utcnow()` 弃用警告
+- 算法单一（仅 HS256）
+- 异常处理简陋
+- 无 RFC 7519 完整验证
+
+**替换方案**：`pip install PyJWT`
+
+```python
+import jwt
+from datetime import datetime, timedelta, timezone
+
+SECRET_KEY = os.environ.get("JWT_SECRET")
+ALGORITHM = "HS256"
+
+def create_access_token(data: dict) -> str:
+    to_encode = data.copy()
+    expire = datetime.now(timezone.utc) + timedelta(hours=24)
+    to_encode.update({"exp": expire, "iat": datetime.now(timezone.utc)})
+    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+
+def verify_token(token: str) -> dict:
+    try:
+        return jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Token expired")
+    except jwt.InvalidTokenError:
+        raise HTTPException(status_code=401, detail="Invalid token")
+```
+
+**收益**：
+- ✅ 符合 RFC 7519 标准
+- ✅ 支持 RS256/ES256 等非对称算法
+- ✅ 专用异常类，错误处理完善
+- ✅ FastAPI 官方推荐方案
+- ✅ PyPI 2M+ 下载/周
+
+---
+
+### 保留手搓：文件系统路由
+
+**现状**：[frontend/pynuxt/routing.py](frontend/pynuxt/routing.py)
+
+**结论**：Starlette/FastAPI 生态**无可靠第三方替代品**，需继续手搓。
+
+原因：
+- Starlette 原生使用 `Route()` + 装饰器
+- 无任何第三方库提供文件系统路由
+- 你的 `routing.py` 是 PyNuxt 核心价值
+
+---
+
+### 保留手搓：BFF 架构
+
+**现状**：[frontend/pynuxt/bff.py](frontend/pynuxt/bff.py) + [frontend/bff_core.py](frontend/bff_core.py)
+
+**结论**：BFF 是**架构模式，非库**，无第三方 pip 包可替代。
+
+可小优化点：
+- 装饰器路由可简化为 Starlette 原生 `Route`
+- httpx 客户端（已有，OK）
+- 模板渲染可升级为 `starlette-async-jinja`（可选）
+
+---
+
+### 可升级：模板渲染 → starlette-async-jinja（可选）
+
+**现状**：同步 Jinja2 渲染
+
+**替换方案**：`pip install starlette-async-jinja jinja2-async-environment`
+
+```python
+from starlette_async_jinja import AsyncJinja2Templates
+
+templates = AsyncJinja2Templates(directory="templates")
+
+async def render_async(request, name: str, **context):
+    return await templates.render_async(name, request, **context)
+```
+
+**结论**：**可选优化**，非必须。同步 Jinja2 在中小型应用性能足够。
+
+---
+
+### 替换结论汇总
+
+| 模块 | 当前实现 | 建议 | 优先级 |
+|------|---------|------|--------|
+| JWT | 手写 | **→ PyJWT** | P0（必须） |
+| 文件路由 | 手写 | 保留手搓 | — |
+| BFF | 手写 | 保留手搓 | — |
+| 模板渲染 | 同步 Jinja2 | 可选 → 异步 | P3（可选） |
