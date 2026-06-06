@@ -289,6 +289,36 @@ DEBUG=True
 
 #### P3-4: 模板渲染升级为异步（可选）
 
+#### P3-5: 用 Python 函数（类似 fasthtml FastTags）重构 components（可选）
+
+**目标**：
+- 将 `frontend/components/*.html` 从 Jinja2 模板改为 Python 函数（类似 fasthtml 的 FastTags）
+- 更好的类型安全、IDE 支持、代码复用
+
+**示例**：
+```python
+from fastcore.xml import FT, to_xml
+
+def LikeButton(post_id, liked, like_count, current_user_id=None):
+    if current_user_id:
+        return FT(
+            "span", 
+            {"id": f"like-btn-{post_id}"},
+            [FT("button", {"hx-post": f"/bff/posts/{post_id}/like", "hx-target": f"#like-btn-{post_id}"}, f"❤️ {like_count}")]
+        )
+    return FT("span", {"id": f"like-btn-{post_id}"}, f"❤️ {like_count}")
+
+def PostItem(post, current_user_id=None):
+    return FT(
+        "div", {"class": "post-item"},
+        [
+            FT("a", {"href": f"/users/{post['author']['username']}"}, post["author"]["display_name"]),
+            FT("p", {}, post["content"]),
+            LikeButton(post["id"], post["liked_by_me"], post["like_count"], current_user_id)
+        ]
+    )
+```
+
 ---
 
 ## 三、参考 FastBlocks 的改进建议（第三阶段）
@@ -339,3 +369,4 @@ DEBUG=True
 - [ ] 添加 HtmxResponse 类
 - [ ] 添加响应压缩
 - [ ] 重构中间件架构
+- [ ] 用 Python 函数（类似 fasthtml FastTags）重构 components
