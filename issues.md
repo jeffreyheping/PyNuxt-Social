@@ -120,6 +120,58 @@ class UserPublicResponse(BaseModel):
 
 ---
 
+### P1-4: 配置管理使用 `os.getenv()` 缺乏类型安全
+
+**位置**：
+- [backend/config.py](backend/config.py)
+- [frontend/config.py](frontend/config.py)
+
+**问题**：纯 `os.getenv()` 读取环境变量，无类型校验，无 IDE 自动补全。
+
+```python
+# 现状
+DEBUG = True  # 硬编码，无法通过环境变量覆盖
+DB_URI = f"sqlite:///{DB_PATH}"  # 字符串拼接，无提示
+```
+
+**修复方案**：使用 `pydantic-settings`（FastAPI 官方推荐）
+
+```bash
+pip install pydantic-settings
+```
+
+```python
+# backend/config.py
+from pydantic_settings import BaseSettings
+from functools import lru_cache
+
+class Settings(BaseSettings):
+    jwt_secret: str = "pynuxt-social-dev-secret-change-in-prod"
+    jwt_algorithm: str = "HS256"
+    jwt_expiration_hours: int = 24 * 7
+    db_path: str = "data.db"
+
+    @property
+    def db_uri(self) -> str:
+        return f"sqlite:///{self.db_path}"
+
+    class Config:
+        env_file = ".env"
+        env_file_encoding = "utf-8"
+
+@lru_cache()
+def get_settings():
+    return Settings()
+```
+
+**收益**：
+- ✅ 类型安全，IDE 自动补全
+- ✅ 自动加载 `.env` 文件
+- ✅ 生产/开发环境分离
+- ✅ 嵌套配置支持
+
+---
+
 ## P2 — 建议修复（影响可维护性）
 
 ### P2-1: `create_post` 参数来源不一致
@@ -143,6 +195,37 @@ async def create_post(self, content: str = Form(...), feed: str = Query("global"
 **问题**：好友关系是双向的，两接口查询逻辑相同，返回数据一样。
 
 **说明**：这是设计问题，ARCHITECTURE.md 已有记录（D1）。
+
+---
+
+### P2-3: 无统一环境变量加载
+
+**位置**：项目根目录缺少 `.env` 文件和加载逻辑
+
+**问题**：环境变量分散在代码中，无统一管理。
+
+**修复方案**：添加 `python-dotenv`
+
+```bash
+pip install python-dotenv
+```
+
+```python
+# backend/main.py / frontend/main.py
+from dotenv import load_dotenv
+load_dotenv()
+```
+
+```ini
+# .env 文件（项目根目录）
+# 开发配置
+JWT_SECRET=pynuxt-social-dev-secret-change-in-prod
+API_BASE=http://localhost:8012
+DEBUG=True
+
+# 生产配置（覆盖上述值）
+# JWT_SECRET=your-production-secret-key-here
+```
 
 ---
 
@@ -189,8 +272,10 @@ async def create_post(self, content: str = Form(...), feed: str = Query("global"
 | P1-1 | email 泄漏 | users.py | 小 |
 | P1-2 | Feed Tab 不同步 | feed.html | 小 |
 | P1-3 | 模块级全局变量 | auth.py | 中 |
+| P1-4 | 配置管理缺乏类型安全 | config.py | 小 |
 | P2-1 | 参数来源不一致 | bff_core.py | 小 |
 | P2-2 | followers/following | users.py | 小 |
+| P2-3 | 无环境变量统一加载 | 项目根目录 | 小 |
 
 ---
 
@@ -302,6 +387,8 @@ def verify_token(token: str) -> dict:
 - ✅ FastAPI 官方推荐方案
 - ✅ PyPI 2M+ 下载/周
 
+**注意**：[backend/routers/auth.py](backend/routers/auth.py) 已使用 `python-jose`，这是成熟方案，可保留。**前端应统一用相同库**。
+
 ---
 
 ### 保留手搓：文件系统路由
@@ -353,7 +440,24 @@ async def render_async(request, name: str, **context):
 
 | 模块 | 当前实现 | 建议 | 优先级 |
 |------|---------|------|--------|
-| JWT | 手写 | **→ PyJWT** | P0（必须） |
+| JWT（前端） | 手写 | **→ PyJWT** | P0（必须） |
+| JWT（后端） | python-jose | 保留（成熟） | — |
 | 文件路由 | 手写 | 保留手搓 | — |
 | BFF | 手写 | 保留手搓 | — |
 | 模板渲染 | 同步 Jinja2 | 可选 → 异步 | P3（可选） |
+| 配置管理 | os.getenv | **→ pydantic-settings** | P1 |
+| 环境变量 | 无 | **→ python-dotenv** | P2 |
+
+---
+
+## 已使用成熟组件（无需替换）
+
+| 部分 | 当前实现 | 评价 |
+|------|---------|------|
+| 密码哈希 | `passlib[bcrypt]` | ✅ 完美，保持 |
+| 数据库 ORM | `SQLAlchemy 2.0` | ✅ 完美，保持 |
+| 静态文件 | `FastAPI StaticFiles` | ✅ 完美，保持 |
+| 异步 HTTP 客户端 | `httpx` | ✅ 完美，保持 |
+| 数据验证 | `pydantic 2.0` | ✅ 完美，保持 |
+| 模板引擎 | `Jinja2` | ✅ 完美，保持 |
+| API 框架 | `FastAPI` | ✅ 完美，保持 |
