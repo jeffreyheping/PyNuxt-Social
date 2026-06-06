@@ -1,4 +1,4 @@
-# PyNuxt-Social 代码审查 Issues
+# PyNuxt-Social 代码审查 & 实施计划
 
 > 审查日期：2026-06-05
 > 审查范围：frontend/ + backend/ 核心模块
@@ -6,9 +6,23 @@
 
 ---
 
-## P0 — 必须修复（影响生产稳定性）
+## 一、实施路线图（总览）
 
-### P0-1: N+1 查询问题
+按优先级和依赖关系，分成三个阶段实施：
+
+| 阶段 | 目标 | 关键任务 |
+|------|------|---------|
+| **第一阶段：稳定性** | 修复生产问题，替换不可靠依赖 | N+1 查询、datetime 弃用、JWT 替换、配置管理 |
+| **第二阶段：体验优化** | 提升开发体验和用户体验 | 引入 Alpine.js、修复 Feed Tab 同步、环境变量 |
+| **第三阶段：框架升级** | 参考 FastBlocks 改进框架 | CSRF 中间件、HTMX 响应类、响应压缩 |
+
+---
+
+## 二、问题详情（按优先级）
+
+### P0 — 必须修复（影响生产稳定性）
+
+#### P0-1: N+1 查询问题
 
 **位置**：[backend/routers/posts.py#L44-65](backend/routers/posts.py#L44-65)
 
@@ -48,7 +62,7 @@ def get_posts(...):
 
 ---
 
-### P0-2: `datetime.utcnow()` 已弃用
+#### P0-2: `datetime.utcnow()` 已弃用
 
 **位置**：
 - [backend/models.py#L25](backend/models.py#L25) — `User.created_at`
@@ -72,283 +86,9 @@ expire = datetime.now(timezone.utc) + timedelta(hours=JWT_EXPIRATION_HOURS)
 
 ---
 
-## P1 — 强烈建议修复（影响正确性/安全性）
-
-### P1-1: 公开 API 泄漏用户邮箱
-
-**位置**：[backend/routers/users.py](backend/routers/users.py)
-
-**问题**：`GET /api/users/{username}` 响应包含 `email` 字段，隐私泄漏。
-
-**修复方案**：创建 `UserPublicResponse` 排除 email：
-
-```python
-class UserPublicResponse(BaseModel):
-    id: int
-    username: str
-    display_name: Optional[str]
-    created_at: datetime
-    post_count: int
-    follower_count: int
-    following_count: int
-    # email 已移除
-```
-
----
-
-### P1-2: Feed Tab 与发帖表单不同步
-
-**位置**：[frontend/pages/feed.html#L7](frontend/pages/feed.html#L7)
-
-**问题**：发帖表单 hardcode `feed=global`，用户切换到"关注" Tab 后发帖，实际发到全局流。
-
-```html
-<form hx-post="/bff/posts?feed=global" ...>
-```
-
-**修复方案**：用隐藏字段动态跟随当前 Tab。
-
----
-
-### P1-3: `_user_cache` 模块级全局变量
+#### P0-3: 手写 JWT → 替换为 PyJWT
 
 **位置**：[frontend/pynuxt/auth.py](frontend/pynuxt/auth.py)
-
-**问题**：`_shared_client` 和 `_user_cache` 是模块级全局变量，多实例部署时可能被共享。
-
-**修复方案**：改为类变量（已有成功案例，见 `BFFBase._shared_client`）。
-
----
-
-### P1-4: 配置管理使用 `os.getenv()` 缺乏类型安全
-
-**位置**：
-- [backend/config.py](backend/config.py)
-- [frontend/config.py](frontend/config.py)
-
-**问题**：纯 `os.getenv()` 读取环境变量，无类型校验，无 IDE 自动补全。
-
-```python
-# 现状
-DEBUG = True  # 硬编码，无法通过环境变量覆盖
-DB_URI = f"sqlite:///{DB_PATH}"  # 字符串拼接，无提示
-```
-
-**修复方案**：使用 `pydantic-settings`（FastAPI 官方推荐）
-
-```bash
-pip install pydantic-settings
-```
-
-```python
-# backend/config.py
-from pydantic_settings import BaseSettings
-from functools import lru_cache
-
-class Settings(BaseSettings):
-    jwt_secret: str = "pynuxt-social-dev-secret-change-in-prod"
-    jwt_algorithm: str = "HS256"
-    jwt_expiration_hours: int = 24 * 7
-    db_path: str = "data.db"
-
-    @property
-    def db_uri(self) -> str:
-        return f"sqlite:///{self.db_path}"
-
-    class Config:
-        env_file = ".env"
-        env_file_encoding = "utf-8"
-
-@lru_cache()
-def get_settings():
-    return Settings()
-```
-
-**收益**：
-- ✅ 类型安全，IDE 自动补全
-- ✅ 自动加载 `.env` 文件
-- ✅ 生产/开发环境分离
-- ✅ 嵌套配置支持
-
----
-
-## P2 — 建议修复（影响可维护性）
-
-### P2-1: `create_post` 参数来源不一致
-
-**位置**：[frontend/bff_core.py#L63-66](frontend/bff_core.py#L63-66)
-
-**问题**：`feed` 用 Query 参数，`content` 用 Form 参数，来源不统一。
-
-```python
-async def create_post(self, content: str = Form(...), feed: str = Query("global")):
-```
-
-**修复方案**：统一为 Form 参数或 Query 参数。
-
----
-
-### P2-2: followers/following 返回相同数据
-
-**位置**：[backend/routers/users.py](backend/routers/users.py) — `get_followers`/`get_following`
-
-**问题**：好友关系是双向的，两接口查询逻辑相同，返回数据一样。
-
-**说明**：这是设计问题，ARCHITECTURE.md 已有记录（D1）。
-
----
-
-### P2-3: 无统一环境变量加载
-
-**位置**：项目根目录缺少 `.env` 文件和加载逻辑
-
-**问题**：环境变量分散在代码中，无统一管理。
-
-**修复方案**：添加 `python-dotenv`
-
-```bash
-pip install python-dotenv
-```
-
-```python
-# backend/main.py / frontend/main.py
-from dotenv import load_dotenv
-load_dotenv()
-```
-
-```ini
-# .env 文件（项目根目录）
-# 开发配置
-JWT_SECRET=pynuxt-social-dev-secret-change-in-prod
-API_BASE=http://localhost:8012
-DEBUG=True
-
-# 生产配置（覆盖上述值）
-# JWT_SECRET=your-production-secret-key-here
-```
-
----
-
-## P3 — 未来改进（不紧急）
-
-### P3-1: 无分页 UI
-
-**位置**：[frontend/pages/feed.html](frontend/pages/feed.html)
-
-**问题**：API 支持 skip/limit，但前端无"加载更多"按钮。
-
-### P3-2: 无删除/编辑帖子功能
-
-**问题**：用户无法删除自己发的帖子。
-
-### P3-3: BFFBase 克隆模式历史包袱
-
-**位置**：[frontend/pynuxt/bff.py](frontend/pynuxt/bff.py)
-
-**问题**：v0.5.0 已用 contextvars 替代 clone，但 `__init__` 仍接收废弃的 `template_dirs` 参数。
-
----
-
-## 已确认设计决策（无需修复）
-
-| 项 | 说明 |
-|----|------|
-| D4 | 无分页 UI — 简化设计 |
-| D5 | 无删除帖子 — 社交产品常见 |
-| D6 | 无编辑资料 — MVP 范围 |
-| D9 | BFFBase 构造函参数无效 — 文档已标注 |
-| D10 | `_action_then_refresh` 未被调用 — 计划删除 |
-| D11 | httpx client shutdown — lifespan 已修复 |
-| D12 | 无 CSRF 防护 — HTMX 表单场景可接受 |
-
----
-
-## 修复优先级汇总
-
-| 优先级 | Issue | 位置 | 预估工作量 |
-|--------|-------|------|----------|
-| P0-1 | N+1 查询 | posts.py | 中 |
-| P0-2 | datetime.utcnow() | models.py, auth.py | 小 |
-| P1-1 | email 泄漏 | users.py | 小 |
-| P1-2 | Feed Tab 不同步 | feed.html | 小 |
-| P1-3 | 模块级全局变量 | auth.py | 中 |
-| P1-4 | 配置管理缺乏类型安全 | config.py | 小 |
-| P2-1 | 参数来源不一致 | bff_core.py | 小 |
-| P2-2 | followers/following | users.py | 小 |
-| P2-3 | 无环境变量统一加载 | 项目根目录 | 小 |
-
----
-
-## 参考 FastBlocks 的改进建议（非必选，值得借鉴）
-
-通过分析 `fastblocks` 仓库，发现以下特性可以提升 PyNuxt 框架：
-
-### 参考 1: HTMX 集成模块（推荐优先）
-
-**来源**：[fastblocks/htmx.py](https://github.com/lesleslie/fastblocks/blob/main/fastblocks/htmx.py)
-
-**借鉴内容**：
-- `HtmxDetails` 类：封装 HTMX 请求头读取
-- `HtmxResponse` 类：支持设置所有 HTMX 响应头（hx-trigger, hx-retarget, hx-push-url 等）
-- 便捷函数：`htmx_redirect()`, `htmx_refresh()`, `htmx_push_url()`, `htmx_retarget()`
-
-**如何应用**：
-在 `frontend/pynuxt/` 下新增 `htmx.py`，简化 BFF 中的 HTMX 响应处理。
-
----
-
-### 参考 2: 中间件架构（推荐）
-
-**来源**：[fastblocks/middleware.py](https://github.com/lesleslie/fastblocks/blob/main/fastblocks/middleware.py)
-
-**借鉴内容**：
-- `MiddlewarePosition` 枚举：用枚举规范中间件加载顺序（CSRF → SESSION → HTMX → ...）
-- `HtmxMiddleware`：在 scope 中注入 HTMX 详情
-- `MiddlewareStackManager`：集中管理中间件注册
-- `CSRFMiddleware`：添加 CSRF 防护（当前你的项目缺少这个，D12 已标注）
-- `SecureHeadersMiddleware`：自动注入安全头
-- `BrotliMiddleware`：响应压缩
-
----
-
-### 参考 3: 模板块渲染系统
-
-**来源**：[fastblocks/adapters/templates/_block_renderer.py](https://github.com/lesleslie/fastblocks/blob/main/fastblocks/adapters/templates/_block_renderer.py)
-
-**借鉴内容**：
-- `BlockDefinition`：定义可独立渲染的模板块
-- `BlockRenderRequest`：块渲染请求对象
-- `BlockUpdateMode` 枚举：REPLACE/APPEND/PREPEND/INNER/OUTER/DELETE
-
----
-
-### 参考 4: Actions 模式（值得参考）
-
-**来源**：[fastblocks/actions/](https://github.com/lesleslie/fastblocks/tree/main/fastblocks/actions)
-
-**借鉴内容**：
-- 语义化工具类：`gather`, `sync`, `minify`, `query`
-- `minify` 动作：自动压缩 HTML/CSS/JS
-- `gather` 动作：自动发现组件、路由、中间件
-
----
-
-### 优先借鉴清单
-
-| 项 | 优先级 | 来源 | 收益 |
-|----|-------|------|------|
-| CSRF 中间件 | 高 | fastblocks/middleware.py | 提升安全性 |
-| HtmxResponse 类 | 高 | fastblocks/htmx.py | 简化 HTMX 响应处理 |
-| 响应压缩 | 中 | fastblocks/middleware.py | 提升加载速度 |
-| 中间件顺序枚举 | 中 | fastblocks/middleware.py | 规范代码架构 |
-
----
-
-## 第三方库替换建议（手搓 vs 第三方）
-
-### 可替换：JWT → PyJWT（强烈推荐）
-
-**现状**：[frontend/pynuxt/auth.py](frontend/pynuxt/auth.py) 手写 JWT 实现
 
 **问题**：
 - `datetime.utcnow()` 弃用警告
@@ -380,77 +120,224 @@ def verify_token(token: str) -> dict:
         raise HTTPException(status_code=401, detail="Invalid token")
 ```
 
-**收益**：
-- ✅ 符合 RFC 7519 标准
-- ✅ 支持 RS256/ES256 等非对称算法
-- ✅ 专用异常类，错误处理完善
-- ✅ FastAPI 官方推荐方案
-- ✅ PyPI 2M+ 下载/周
-
-**注意**：[backend/routers/auth.py](backend/routers/auth.py) 已使用 `python-jose`，这是成熟方案，可保留。**前端应统一用相同库**。
+**注意**：[backend/routers/auth.py](backend/routers/auth.py) 已使用 `python-jose`（成熟方案），保持不变。
 
 ---
 
-### 保留手搓：文件系统路由
+### P1 — 强烈建议修复（影响正确性/安全性/体验）
 
-**现状**：[frontend/pynuxt/routing.py](frontend/pynuxt/routing.py)
+#### P1-1: 公开 API 泄漏用户邮箱
 
-**结论**：Starlette/FastAPI 生态**无可靠第三方替代品**，需继续手搓。
+**位置**：[backend/routers/users.py](backend/routers/users.py)
 
-原因：
-- Starlette 原生使用 `Route()` + 装饰器
-- 无任何第三方库提供文件系统路由
-- 你的 `routing.py` 是 PyNuxt 核心价值
+**问题**：`GET /api/users/{username}` 响应包含 `email` 字段，隐私泄漏。
 
----
-
-### 保留手搓：BFF 架构
-
-**现状**：[frontend/pynuxt/bff.py](frontend/pynuxt/bff.py) + [frontend/bff_core.py](frontend/bff_core.py)
-
-**结论**：BFF 是**架构模式，非库**，无第三方 pip 包可替代。
-
-可小优化点：
-- 装饰器路由可简化为 Starlette 原生 `Route`
-- httpx 客户端（已有，OK）
-- 模板渲染可升级为 `starlette-async-jinja`（可选）
-
----
-
-### 可升级：模板渲染 → starlette-async-jinja（可选）
-
-**现状**：同步 Jinja2 渲染
-
-**替换方案**：`pip install starlette-async-jinja jinja2-async-environment`
+**修复方案**：创建 `UserPublicResponse` 排除 email
 
 ```python
-from starlette_async_jinja import AsyncJinja2Templates
-
-templates = AsyncJinja2Templates(directory="templates")
-
-async def render_async(request, name: str, **context):
-    return await templates.render_async(name, request, **context)
+class UserPublicResponse(BaseModel):
+    id: int
+    username: str
+    display_name: Optional[str]
+    created_at: datetime
+    post_count: int
+    follower_count: int
+    following_count: int
+    # email 已移除
 ```
 
-**结论**：**可选优化**，非必须。同步 Jinja2 在中小型应用性能足够。
+---
+
+#### P1-2: Feed Tab 与发帖表单不同步
+
+**位置**：[frontend/pages/feed.html#L7](frontend/pages/feed.html#L7)
+
+**问题**：发帖表单 hardcode `feed=global`，用户切换到"关注" Tab 后发帖，实际发到全局流。
+
+**修复方案**：结合 Alpine.js 动态同步 Tab 状态
 
 ---
 
-### 替换结论汇总
+#### P1-3: `_user_cache` 模块级全局变量
 
-| 模块 | 当前实现 | 建议 | 优先级 |
-|------|---------|------|--------|
-| JWT（前端） | 手写 | **→ PyJWT** | P0（必须） |
-| JWT（后端） | python-jose | 保留（成熟） | — |
-| 文件路由 | 手写 | 保留手搓 | — |
-| BFF | 手写 | 保留手搓 | — |
-| 模板渲染 | 同步 Jinja2 | 可选 → 异步 | P3（可选） |
-| 配置管理 | os.getenv | **→ pydantic-settings** | P1 |
-| 环境变量 | 无 | **→ python-dotenv** | P2 |
+**位置**：[frontend/pynuxt/auth.py](frontend/pynuxt/auth.py)
+
+**问题**：`_shared_client` 和 `_user_cache` 是模块级全局变量，多实例部署时可能被共享。
+
+**修复方案**：改为类变量（已有成功案例，见 `BFFBase._shared_client`）
 
 ---
 
-## 已使用成熟组件（无需替换）
+#### P1-4: 配置管理使用 `os.getenv()` 缺乏类型安全
+
+**位置**：
+- [backend/config.py](backend/config.py)
+- [frontend/config.py](frontend/config.py)
+
+**问题**：纯 `os.getenv()` 读取环境变量，无类型校验，无 IDE 自动补全。
+
+**修复方案**：使用 `pydantic-settings`（FastAPI 官方推荐）
+
+```bash
+pip install pydantic-settings
+```
+
+```python
+# backend/config.py
+from pydantic_settings import BaseSettings
+from functools import lru_cache
+
+class Settings(BaseSettings):
+    jwt_secret: str = "pynuxt-social-dev-secret-change-in-prod"
+    jwt_algorithm: str = "HS256"
+    jwt_expiration_hours: int = 24 * 7
+    db_path: str = "data.db"
+
+    @property
+    def db_uri(self) -> str:
+        return f"sqlite:///{self.db_path}"
+
+    class Config:
+        env_file = ".env"
+        env_file_encoding = "utf-8"
+
+@lru_cache()
+def get_settings():
+    return Settings()
+```
+
+---
+
+#### P1-5: 引入 Alpine.js 提升客户端交互体验
+
+**位置**：[frontend/layouts/default.html](frontend/layouts/default.html)
+
+**目标**：
+- 解决 Feed Tab 同步问题
+- 添加字数实时统计
+- 避免手动"粘合" HTMX 和状态
+
+**实施步骤**：
+1. 在 `default.html` 引入 Alpine.js
+2. 重构 `feed.html`，用 `x-data` 管理状态
+3. 动态同步 `feed` 参数和 Tab 高亮
+
+```html
+<!-- 引入 -->
+<script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+
+<!-- feed.html 重构 -->
+<div x-data="{ tab: 'global', content: '' }">
+    <div class="tabs">
+        <a 
+            :class="{'tab active': tab === 'global', 'tab': tab !== 'global'}"
+            @click="tab = 'global'"
+            hx-get="/bff/posts?feed=global"
+            hx-target="#post-list"
+        >
+            全局
+        </a>
+        <a 
+            :class="{'tab active': tab === 'following', 'tab': tab !== 'following'}"
+            @click="tab = 'following'"
+            hx-get="/bff/posts?feed=following"
+            hx-target="#post-list"
+        >
+            关注
+        </a>
+    </div>
+
+    <form 
+        hx-post="/bff/posts" 
+        hx-target="#post-list"
+        hx-vals="{'feed': tab}"
+    >
+        <textarea 
+            name="content" 
+            x-model="content"
+            maxlength="280"
+        ></textarea>
+        <span x-text="280 - content.length + ' 字剩余'"></span>
+        <button type="submit" :disabled="content.trim() === ''">发布</button>
+    </form>
+</div>
+```
+
+---
+
+### P2 — 建议修复（影响可维护性）
+
+#### P2-1: `create_post` 参数来源不一致
+
+**位置**：[frontend/bff_core.py#L63-66](frontend/bff_core.py#L63-66)
+
+**问题**：`feed` 用 Query 参数，`content` 用 Form 参数，来源不统一。
+
+**修复方案**：统一为 Form 参数
+
+---
+
+#### P2-2: followers/following 返回相同数据
+
+**位置**：[backend/routers/users.py](backend/routers/users.py) — `get_followers`/`get_following`
+
+**问题**：好友关系是双向的，两接口查询逻辑相同，返回数据一样。
+
+---
+
+#### P2-3: 无统一环境变量加载
+
+**位置**：项目根目录缺少 `.env` 文件和加载逻辑
+
+**问题**：环境变量分散在代码中，无统一管理。
+
+**修复方案**：添加 `python-dotenv`
+
+```bash
+pip install python-dotenv
+```
+
+```python
+# backend/main.py / frontend/main.py
+from dotenv import load_dotenv
+load_dotenv()
+```
+
+```ini
+# .env 文件（项目根目录）
+JWT_SECRET=pynuxt-social-dev-secret-change-in-prod
+API_BASE=http://localhost:8012
+DEBUG=True
+```
+
+---
+
+### P3 — 未来改进（不紧急）
+
+#### P3-1: 无分页 UI
+
+#### P3-2: 无删除/编辑帖子功能
+
+#### P3-3: BFFBase 克隆模式历史包袱
+
+#### P3-4: 模板渲染升级为异步（可选）
+
+---
+
+## 三、参考 FastBlocks 的改进建议（第三阶段）
+
+通过分析 `fastblocks` 仓库，可在第三阶段实施：
+
+| 项 | 来源 | 收益 |
+|----|------|------|
+| CSRF 中间件 | fastblocks/middleware.py | 提升安全性 |
+| HtmxResponse 类 | fastblocks/htmx.py | 简化 HTMX 响应处理 |
+| 响应压缩 (Brotli) | fastblocks/middleware.py | 提升加载速度 |
+| 中间件顺序枚举 | fastblocks/middleware.py | 规范代码架构 |
+
+---
+
+## 四、已使用成熟组件（无需替换）
 
 | 部分 | 当前实现 | 评价 |
 |------|---------|------|
@@ -461,3 +348,28 @@ async def render_async(request, name: str, **context):
 | 数据验证 | `pydantic 2.0` | ✅ 完美，保持 |
 | 模板引擎 | `Jinja2` | ✅ 完美，保持 |
 | API 框架 | `FastAPI` | ✅ 完美，保持 |
+
+---
+
+## 五、分阶段任务清单
+
+### 第一阶段：稳定性（2-3 天）
+
+- [ ] 修复 N+1 查询问题
+- [ ] 替换 `datetime.utcnow()` 为 `datetime.now(timezone.utc)`
+- [ ] 前端 JWT 替换为 PyJWT
+- [ ] 配置管理替换为 pydantic-settings
+
+### 第二阶段：体验优化（1-2 天）
+
+- [ ] 隐藏公开 API 的 email 字段
+- [ ] 修复 `_user_cache` 全局变量问题
+- [ ] 引入 python-dotenv + .env 文件
+- [ ] 引入 Alpine.js 并重构 feed.html
+
+### 第三阶段：框架升级（可选，按需求）
+
+- [ ] 添加 CSRF 中间件
+- [ ] 添加 HtmxResponse 类
+- [ ] 添加响应压缩
+- [ ] 重构中间件架构
