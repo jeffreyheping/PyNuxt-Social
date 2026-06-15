@@ -42,13 +42,13 @@ def render_profile(page: ft.Page, api, username: str) -> ft.Control:
         content_area.update()
         if active_tab["value"] == "posts":
             content_area.controls = [posts_column]
-            page.run_task(_load_posts())
+            page.run_task(_load_posts)
         elif active_tab["value"] == "followers":
             content_area.controls = [followers_column]
-            page.run_task(_load_followers())
+            page.run_task(_load_followers)
         else:
             content_area.controls = [following_column]
-            page.run_task(_load_following())
+            page.run_task(_load_following)
         content_area.update()
 
     # —— 加载用户主页信息 ——
@@ -132,7 +132,7 @@ def render_profile(page: ft.Page, api, username: str) -> ft.Control:
                     spacing=4,
                 ),
                 padding=16,
-                border=ft.border.all(1, ft.Colors.OUTLINE_VARIANT),
+                border=ft.Border.all(1, ft.Colors.OUTLINE_VARIANT),
                 border_radius=12,
             )
 
@@ -213,25 +213,25 @@ def render_profile(page: ft.Page, api, username: str) -> ft.Control:
                 if from_user.get("username") == username:
                     await api.accept_friend_request(r["id"])
                     page.show_snack_bar(ft.SnackBar(ft.Text("已接受好友请求")))
-                    page.run_task(_load_profile())
+                    page.run_task(_load_profile)
                     return
             page.show_snack_bar(ft.SnackBar(ft.Text("找不到对应的请求")))
         except Exception as ex:
             page.show_snack_bar(ft.SnackBar(ft.Text(f"操作失败: {ex}")))
 
     def _accept_request(e):
-        page.run_task(_accept_request_impl())
+        page.run_task(_accept_request_impl)
 
     async def _send_request_impl():
         try:
             await api.send_friend_request(username)
             page.show_snack_bar(ft.SnackBar(ft.Text("已发送好友请求")))
-            page.run_task(_load_profile())
+            page.run_task(_load_profile)
         except Exception as ex:
             page.show_snack_bar(ft.SnackBar(ft.Text(f"发送失败: {ex}")))
 
     def _send_request(e):
-        page.run_task(_send_request_impl())
+        page.run_task(_send_request_impl)
 
     body = [
         header_container,
@@ -239,5 +239,5 @@ def render_profile(page: ft.Page, api, username: str) -> ft.Control:
         content_area,
     ]
 
-    page.run_task(_load_profile())
+    page.run_task(_load_profile)
     return layout(page, api, title="", content=body)

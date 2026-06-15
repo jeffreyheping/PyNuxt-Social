@@ -91,20 +91,7 @@ def user_card(
             except Exception:
                 e.page.show_snack_bar(ft.SnackBar(ft.Text("操作失败")))
 
-        # 注册到页面生命周期 — 先在第一次 build 后异步拉取
-        import flet_effect
-
-        # 由于没有 flet_effect，我们用一个简单的方式：延迟执行
-        from flet import Page
-
-        # 这里我们用一个「挂载后立即执行」的技巧: 把 loader 包成一个不可见的 Row
-        loader = ft.Container(width=0, height=0, visible=False)
-
-        def _on_mount(e):
-            page_ref["page"] = e.page
-            e.page.run_task(load_status)
-
-        # 需要把它的 on_visible 绑定上 — 但更简单的做法是在 user_card 返回时直接调度
+        # 延迟加载好友状态 — 由调用方手动调用 load_status（通过 card.data["load_status"]）
         # 这里改为: 直接把异步任务放到 page.run_task 里
         # 调用者需要先有 page 引用；改为: 让 user_card 接受可选的 page 参数
         # 但为了保持 API 简单，改为: 由调用者手动调用 load_status
@@ -141,7 +128,7 @@ def user_card(
             spacing=12,
         ),
         padding=ft.Padding(12, 10, 12, 10),
-        border=ft.border.all(1, ft.Colors.OUTLINE_VARIANT),
+        border=ft.Border.all(1, ft.Colors.OUTLINE_VARIANT),
         border_radius=10,
         on_click=_go_profile,
         data={"load_status": load_status if show_friend_button and api.is_logged_in else None},

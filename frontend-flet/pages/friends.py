@@ -20,7 +20,7 @@ def render_friends(page: ft.Page, api) -> ft.Control:
     refresh_btn = ft.TextButton(
         "刷新",
         icon=ft.Icons.REFRESH,
-        on_click=lambda e: page.run_task(_load_requests()),
+        on_click=lambda e: page.run_task(_load_requests),
     )
 
     async def _load_requests():
@@ -49,7 +49,7 @@ def render_friends(page: ft.Page, api) -> ft.Control:
                 try:
                     await api.accept_friend_request(req["id"])
                     page.show_snack_bar(ft.SnackBar(ft.Text("已接受")))
-                    page.run_task(_load_requests())
+                    page.run_task(_load_requests)
                 except Exception as ex:
                     page.show_snack_bar(ft.SnackBar(ft.Text(f"失败: {ex}")))
             page.run_task(do_accept)
@@ -59,7 +59,7 @@ def render_friends(page: ft.Page, api) -> ft.Control:
                 try:
                     await api.reject_friend_request(req["id"])
                     page.show_snack_bar(ft.SnackBar(ft.Text("已拒绝")))
-                    page.run_task(_load_requests())
+                    page.run_task(_load_requests)
                 except Exception as ex:
                     page.show_snack_bar(ft.SnackBar(ft.Text(f"失败: {ex}")))
             page.run_task(do_reject)
@@ -89,7 +89,7 @@ def render_friends(page: ft.Page, api) -> ft.Control:
                 spacing=12,
             ),
             padding=12,
-            border=ft.border.all(1, ft.Colors.OUTLINE_VARIANT),
+            border=ft.Border.all(1, ft.Colors.OUTLINE_VARIANT),
             border_radius=10,
         )
 
@@ -99,5 +99,5 @@ def render_friends(page: ft.Page, api) -> ft.Control:
         requests_column,
     ]
 
-    page.run_task(_load_requests())
+    page.run_task(_load_requests)
     return layout(page, api, title="", content=body)

@@ -38,7 +38,7 @@ def render_feed(page: ft.Page, api) -> ft.Control:
     # feed tabs
     def switch_feed(feed_type: str):
         current_feed["value"] = feed_type
-        page.run_task(_load_posts())
+        page.run_task(_load_posts)
 
     tab_global = ft.TextButton("全部", on_click=lambda e: switch_feed("global"))
     tab_following = ft.TextButton("关注", on_click=lambda e: switch_feed("following"))
@@ -69,7 +69,7 @@ def render_feed(page: ft.Page, api) -> ft.Control:
             await api.create_post(content)
             new_post_input.value = ""
             # 刷新列表
-            page.run_task(_load_posts())
+            page.run_task(_load_posts)
         except Exception as ex:
             page.show_snack_bar(ft.SnackBar(ft.Text(f"发布失败: {ex}")))
         finally:
@@ -81,7 +81,7 @@ def render_feed(page: ft.Page, api) -> ft.Control:
         content = new_post_input.value.strip() if new_post_input.value else ""
         if not content:
             return
-        page.run_task(_do_submit_post(content))
+        page.run_task(_do_submit_post, content)
 
     # --- 页面组装 ---
     top_card = ft.Container(
@@ -96,7 +96,7 @@ def render_feed(page: ft.Page, api) -> ft.Control:
             spacing=8,
         ),
         padding=12,
-        border=ft.border.all(1, ft.Colors.OUTLINE_VARIANT),
+        border=ft.Border.all(1, ft.Colors.OUTLINE_VARIANT),
         border_radius=10,
     )
 
@@ -118,6 +118,6 @@ def render_feed(page: ft.Page, api) -> ft.Control:
     ]
 
     # 首次加载
-    page.run_task(_load_posts())
+    page.run_task(_load_posts)
 
     return layout(page, api, title="", content=body)

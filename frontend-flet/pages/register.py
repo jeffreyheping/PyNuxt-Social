@@ -81,7 +81,7 @@ def render_register(page: ft.Page, api) -> ft.Control:
             horizontal_alignment=ft.CrossAxisAlignment.CENTER,
         ),
         padding=24,
-        border=ft.border.all(1, ft.Colors.OUTLINE_VARIANT),
+        border=ft.Border.all(1, ft.Colors.OUTLINE_VARIANT),
         border_radius=12,
         width=420,
     )

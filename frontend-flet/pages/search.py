@@ -58,7 +58,7 @@ def render_search(page: ft.Page, api) -> ft.Control:
         results_column.update()
 
     def _do_search():
-        page.run_task(_do_search_async())
+        page.run_task(_do_search_async)
 
     body = [
         ft.Row([search_input, search_btn], spacing=8),

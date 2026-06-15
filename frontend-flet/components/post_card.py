@@ -30,14 +30,15 @@ def post_card(
     like_count_ref = {"value": like_count}  # 用 dict 让闭包可变
     liked_ref = {"value": liked}
 
-    # 点赞按钮（单独的控件，方便局部更新）
-    like_btn = ft.IconButton(
+    # 点赞按钮（图标 + 数字，Flet 0.85 的 IconButton 不支持 text 参数）
+    like_icon_btn = ft.IconButton(
         icon=ft.Icons.FAVORITE_BORDER if not liked else ft.Icons.FAVORITE,
         icon_color=ft.Colors.RED if liked else None,
-        text=str(like_count),
         tooltip="点赞",
         on_click=lambda e: _on_like(e),
     )
+    like_count_text = ft.Text(str(like_count), size=12)
+    like_btn = ft.Row([like_icon_btn, like_count_text], spacing=2, alignment=ft.MainAxisAlignment.CENTER)
 
     def _on_like(e):
         """点击点赞按钮 — 调用 API 并局部更新按钮状态"""
@@ -52,11 +53,11 @@ def post_card(
                 # 更新状态
                 liked_ref["value"] = result.get("liked", not liked_ref["value"])
                 like_count_ref["value"] = result.get("like_count", like_count_ref["value"] + 1)
-                like_btn.icon = (
+                like_icon_btn.icon = (
                     ft.Icons.FAVORITE_BORDER if not liked_ref["value"] else ft.Icons.FAVORITE
                 )
-                like_btn.icon_color = ft.Colors.RED if liked_ref["value"] else None
-                like_btn.text = str(like_count_ref["value"])
+                like_icon_btn.icon_color = ft.Colors.RED if liked_ref["value"] else None
+                like_count_text.value = str(like_count_ref["value"])
                 like_btn.update()
                 if on_like_changed:
                     await on_like_changed()
@@ -115,7 +116,7 @@ def post_card(
             spacing=10,
         ),
         padding=ft.Padding(16, 12, 16, 12),
-        border=ft.border.all(1, ft.Colors.OUTLINE_VARIANT),
+        border=ft.Border.all(1, ft.Colors.OUTLINE_VARIANT),
         border_radius=12,
         bgcolor=ft.Colors.SURFACE,
         shadow=ft.BoxShadow(blur_radius=2, spread_radius=0, color=ft.Colors.with_opacity(0.1, ft.Colors.BLACK)),

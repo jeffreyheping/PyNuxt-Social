@@ -1,11 +1,11 @@
 """Flet 前端入口
 
 用法:
-    flet run main.py
+    flet run main.py --web --port 3000
     # 或
     python main.py
 
-路由表（模仿 Nuxt 的 filesytem routing，但显式注册）:
+路由表（模仿 Nuxt 的 filesystem routing，但显式注册）:
     /              → 首页
     /login         → 登录
     /register      → 注册
@@ -17,7 +17,7 @@
 架构:
     - 每个 Session 有一个独立的 ApiClient（同一浏览器 tab 内共享状态）
     - 页面函数 (render_xxx) 返回一个 Flet 控件树
-    - 通过 update_title 触发路由重绘
+    - 通过 route_change 触发路由重绘
 """
 from __future__ import annotations
 
@@ -56,17 +56,13 @@ async def main(page: ft.Page):
     except Exception:
         pass
 
-    # 页面容器 — 内容会被 route_change 替换
+    # 页面容器 — 内容会被 navigate 替换
     body = ft.Column([], expand=True, spacing=0, scroll=ft.ScrollMode.AUTO)
 
-    async def route_change(route: ft.RouteChangeEvent):
-        """路由切换逻辑
-
-        注意: 每个页面返回一个全新的 Control 树，替换 body 的内容。
-        """
+    async def navigate(path: str):
+        """根据路径渲染对应页面"""
         body.controls = []
 
-        path = route.route or "/"
         # 解析动态路由 /users/{username}
         if path.startswith("/users/"):
             username = path[len("/users/"):].strip("/")
@@ -101,6 +97,10 @@ async def main(page: ft.Page):
         except Exception:
             pass
 
+    async def route_change(e: ft.RouteChangeEvent):
+        """路由切换回调 — Flet 0.85+ 要求 async"""
+        await navigate(e.route)
+
     async def view_pop(e: ft.ViewPopEvent):
         # 支持浏览器的返回键
         if page.views:
@@ -110,14 +110,17 @@ async def main(page: ft.Page):
     page.on_route_change = route_change
     page.on_view_pop = view_pop
 
-    # 初始路由
-    initial_route = page.route or "/"
-    page.route = initial_route
-
-    # 给 body 一个初始占位内容，等 route_change 再填充
+    # 给 body 一个初始占位内容
     page.add(body)
-    await route_change(ft.RouteChangeEvent(route=initial_route))
+
+    # 首次加载：直接导航到当前路由
+    await navigate(page.route or "/")
 
 
 if __name__ == "__main__":
-    ft.app(target=main, view=ft.AppView.FLET_APP)
+    import sys
+    # 命令行 --web 则浏览器模式，否则桌面模式
+    if "--web" in sys.argv:
+        ft.run(main, view=ft.AppView.WEB_BROWSER, port=3000)
+    else:
+        ft.run(main)
