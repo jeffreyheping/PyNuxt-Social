@@ -1,29 +1,13 @@
 {% extends "layouts/default.html" %}
 {% block title %}动态流 - {{ site_name }}{% endblock %}
 {% block body %}
-{# 发帖框 — 发帖后始终刷新 global feed（新帖一定在全局流中）#}
-<div class="card">
-    <div class="card-body">
-        <form class="post-form" hx-post="/bff/posts?feed=global" hx-target="#post-list" hx-swap="innerHTML swap:300ms">
-            <textarea name="content" placeholder="说点什么..." required maxlength="280"></textarea>
-            <div class="form-actions">
-                <span class="char-count">280字以内</span>
-                <button type="submit" class="btn btn-primary">发布</button>
-            </div>
-        </form>
-    </div>
+
+{# 初始加载：HTMX 请求完整组件 #}
+<div id="feed-content"
+     hx-get="/bff/posts?feed=global&full=true"
+     hx-trigger="load"
+     hx-swap="outerHTML">
+    <div class="loading">加载中...</div>
 </div>
 
-{# 双 Tab 切换 #}
-<div class="tabs" id="feed-tabs">
-    <a class="tab active" hx-get="/bff/posts?feed=global" hx-target="#post-list" hx-swap="innerHTML">全局</a>
-    <a class="tab" hx-get="/bff/posts?feed=following" hx-target="#post-list" hx-swap="innerHTML">关注</a>
-</div>
-
-{# 帖子列表 #}
-<div class="card">
-    <div id="post-list" hx-get="/bff/posts?feed=global" hx-trigger="load">
-        <div class="loading">加载中...</div>
-    </div>
-</div>
 {% endblock %}

@@ -5,7 +5,7 @@ import os
 DEBUG = True
 
 # 后端 API 地址
-API_BASE = os.getenv("API_BASE", "http://localhost:8012")
+API_BASE = os.getenv("API_BASE", "http://localhost:8000")
 
 # 站点名称
 SITE_NAME = "PyNuxt-Social"

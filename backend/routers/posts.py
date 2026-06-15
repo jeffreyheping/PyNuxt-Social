@@ -41,16 +41,18 @@ def _get_friend_ids(user_id: int, db: Session) -> set:
     return friend_ids
 
 
-def _serialize_post(post: Post, current_user: Optional[User], db: Session) -> dict:
-    """将 Post ORM 对象序列化为 API 响应字典"""
-    like_count = db.query(Like).filter(Like.post_id == post.id).count()
-    liked_by_me = False
-    if current_user:
-        liked_by_me = db.query(Like).filter(
-            Like.post_id == post.id, Like.user_id == current_user.id
-        ).first() is not None
+def _serialize_post_fast(
+    post: Post,
+    authors: dict[int, User],
+    likes_by_post: dict[int, list[Like]],
+    current_user_id: int | None,
+) -> dict:
+    """将 Post ORM 对象序列化为 API 响应字典（使用预取数据，零额外查询）"""
+    author = authors.get(post.author_id)
+    post_likes = likes_by_post.get(post.id, [])
+    like_count = len(post_likes)
+    liked_by_me = any(l.user_id == current_user_id for l in post_likes) if current_user_id else False
 
-    author = db.query(User).filter(User.id == post.author_id).first()
     return {
         "id": post.id,
         "author": {
@@ -63,6 +65,31 @@ def _serialize_post(post: Post, current_user: Optional[User], db: Session) -> di
         "like_count": like_count,
         "liked_by_me": liked_by_me,
     }
+
+
+def _batch_serialize_posts(
+    posts: list[Post],
+    db: Session,
+    current_user_id: int | None,
+) -> list[dict]:
+    """批量序列化帖子列表（3 SQL 固定，无论帖子数量）"""
+    if not posts:
+        return []
+
+    # SQL 1: 批量查询作者
+    author_ids = {p.author_id for p in posts}
+    authors = {u.id: u for u in db.query(User).filter(User.id.in_(author_ids)).all()}
+
+    # SQL 2: 批量查询点赞
+    post_ids = [p.id for p in posts]
+    likes = db.query(Like).filter(Like.post_id.in_(post_ids)).all()
+
+    # 按 post_id 分组
+    likes_by_post: dict[int, list[Like]] = {}
+    for like in likes:
+        likes_by_post.setdefault(like.post_id, []).append(like)
+
+    return [_serialize_post_fast(p, authors, likes_by_post, current_user_id) for p in posts]
 
 
 # ==================== API 路由 ====================
@@ -103,7 +130,7 @@ def get_posts(
             .all()
         )
 
-    return [_serialize_post(p, current_user, db) for p in posts]
+    return _batch_serialize_posts(posts, db, current_user.id if current_user else None)
 
 
 @router.post("", status_code=201)

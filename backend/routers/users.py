@@ -5,14 +5,35 @@
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
+from typing import Optional
 
 from database import get_db
 from models import User, Post, Like, FriendRequest
 from routers.auth import get_current_user_optional
-from routers.posts import _serialize_post, _get_friend_ids
+from routers.posts import _batch_serialize_posts, _get_friend_ids
 
 router = APIRouter(prefix="/api/users", tags=["users"])
+
+
+# ==================== Response Schema ====================
+
+class UserPublicResponse(BaseModel):
+    """公开用户信息（排除 email、password_hash 等敏感字段）"""
+    id: int
+    username: str
+    display_name: Optional[str] = None
+    created_at: Optional[str] = None
+
+    model_config = {"from_attributes": True}
+
+
+class UserProfileResponse(UserPublicResponse):
+    """用户详情（含统计，排除 email）"""
+    post_count: int = 0
+    follower_count: int = 0
+    following_count: int = 0
 
 
 # ==================== API 路由 ====================
@@ -42,7 +63,7 @@ def search_users(
     ]
 
 
-@router.get("/{username}")
+@router.get("/{username}", response_model=UserProfileResponse)
 def get_user(username: str, db: Session = Depends(get_db)):
     """获取用户详情（含统计）"""
     user = db.query(User).filter(User.username == username).first()
@@ -89,7 +110,7 @@ def get_user_posts(
         .limit(limit)
         .all()
     )
-    return [_serialize_post(p, current_user, db) for p in posts]
+    return _batch_serialize_posts(posts, db, current_user.id if current_user else None)
 
 
 @router.get("/{username}/followers")

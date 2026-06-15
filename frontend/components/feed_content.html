@@ -1,0 +1,52 @@
+{# Feed 完整组件 — 发帖框 + Tabs + 帖子列表
+
+由 BFF 渲染，两种场景：
+1. 初始加载：hx-get + full=true → outerHTML 替换
+2. 发帖后：hx-post → outerHTML 替换（表单自动清空）
+3. Tab 切换：hx-get 不带 full → 只替换 #post-list（Alpine 瞬间切换高亮）
+#}
+<div id="feed-content" x-data="{ tab: '{{ current_feed }}', content: '' }">
+
+    {# 发帖框 — feed 跟随当前 Tab #}
+    <div class="card">
+        <div class="card-body">
+            <form class="post-form"
+                  hx-post="/bff/posts"
+                  hx-target="#feed-content"
+                  hx-swap="outerHTML">
+                <textarea name="content"
+                          placeholder="说点什么..."
+                          required
+                          maxlength="280"
+                          x-model="content"></textarea>
+                <input type="hidden" name="feed" :value="tab">
+                <div class="form-actions">
+                    <span class="char-count" x-text="280 - content.length + ' 字剩余'"></span>
+                    <button type="submit" class="btn btn-primary" :disabled="!content.trim()">发布</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    {# 双 Tab — Alpine 瞬间切换高亮，HTMX 加载列表 #}
+    <div class="tabs">
+        <a :class="tab === 'global' ? 'tab active' : 'tab'"
+           @click="tab = 'global'"
+           hx-get="/bff/posts?feed=global"
+           hx-target="#post-list"
+           hx-swap="innerHTML">全局</a>
+        <a :class="tab === 'following' ? 'tab active' : 'tab'"
+           @click="tab = 'following'"
+           hx-get="/bff/posts?feed=following"
+           hx-target="#post-list"
+           hx-swap="innerHTML">关注</a>
+    </div>
+
+    {# 帖子列表 — Tab 切换只刷新这一块 #}
+    <div class="card">
+        <div id="post-list">
+            {% include "components/post_list.html" %}
+        </div>
+    </div>
+
+</div>

@@ -3,7 +3,7 @@
 提供注册、登录、登出、获取当前用户信息。
 密码 bcrypt 哈希，Token python-jose JWT。
 """
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -71,7 +71,7 @@ def get_password_hash(password: str) -> str:
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
     """创建 JWT Token"""
     to_encode = data.copy()
-    expire = datetime.utcnow() + (expires_delta or timedelta(hours=JWT_EXPIRATION_HOURS))
+    expire = datetime.now(timezone.utc) + (expires_delta or timedelta(hours=JWT_EXPIRATION_HOURS))
     to_encode.update({"exp": expire})
     # JWT sub 必须是字符串
     if "sub" in to_encode and isinstance(to_encode["sub"], int):

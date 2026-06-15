@@ -64,7 +64,7 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 
 # ==================== BFF 路由注册（核心：一行一个）====================
 
-auth_bff = AuthBFF(API_BASE)
+auth_bff = AuthBFF()
 
 FeedBFF.register(app, API_BASE)
 UserBFF.register(app, API_BASE)
@@ -121,7 +121,8 @@ async def register(
         _set_auth_cookie(response, token)
         response.headers["HX-Redirect"] = "/feed"
         return response
-    except Exception:
+    except Exception as e:
+        logger.error(f"注册失败: {e}")
         return HTMLResponse('<div class="error-message">注册失败，用户名或邮箱可能已存在</div>')
 
 

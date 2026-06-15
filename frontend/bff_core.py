@@ -11,7 +11,7 @@ BFF 方法 = 路由 + 业务逻辑 + 渲染，一处搞定。
 """
 from fastapi import Form, Query
 
-from pynuxt.bff import BFFBase, get, post, put
+from pynuxt.bff import BFFBase, get, post, put, CrudAction
 
 
 class AuthBFF(BFFBase):
@@ -47,13 +47,15 @@ class FeedBFF(BFFBase):
     async def get_posts(
         self,
         feed: str = Query("global"),
+        full: bool = Query(False),
         skip: int = Query(0),
         limit: int = Query(20),
     ) -> str:
-        """获取动态流并渲染帖子列表"""
+        """获取动态流；full=True 返回完整组件，否则只返回帖子列表"""
         posts = await self._get("/api/posts", params={"feed": feed, "skip": skip, "limit": limit})
+        template = "components/feed_content.html" if full else "components/post_list.html"
         return self._render(
-            "components/post_list.html",
+            template,
             data=posts,
             current_user_id=self.current_user_id,
             current_feed=feed,
@@ -63,13 +65,13 @@ class FeedBFF(BFFBase):
     async def create_post(
         self,
         content: str = Form(...),
-        feed: str = Query("global"),
+        feed: str = Form("global"),
     ) -> str:
-        """发帖后刷新列表"""
+        """发帖后返回完整组件（outerHTML 替换，表单自动清空）"""
         await self._post("/api/posts", {"content": content})
         posts = await self._get("/api/posts", params={"feed": feed})
         return self._render(
-            "components/post_list.html",
+            "components/feed_content.html",
             data=posts,
             current_user_id=self.current_user_id,
             current_feed=feed,
@@ -88,9 +90,10 @@ class FeedBFF(BFFBase):
 
 
 class UserBFF(BFFBase):
-    """用户业务 BFF"""
+    """用户业务 BFF — 混合写法"""
     prefix = "/bff/users"
 
+    # 有 BFF 层业务逻辑（空查询守卫）→ 保留装饰器
     @get("/search", auth="token")
     async def search_users(self, q: str = Query("")) -> str:
         """搜索用户，返回结果片段"""
@@ -99,74 +102,64 @@ class UserBFF(BFFBase):
         users = await self._get("/api/users", params={"q": q})
         return self._render("components/search_results.html", data=users)
 
-    @get("/{username}/profile", auth="optional")
-    async def get_user_profile(self, username: str) -> str:
-        """获取用户详情，返回 header 片段"""
-        user = await self._get(f"/api/users/{username}")
-        return self._render(
-            "components/profile_header.html",
-            data=user,
-            current_user_id=self.current_user_id,
-        )
-
-    @get("/{username}/posts", auth="optional")
-    async def get_user_posts(
-        self,
-        username: str,
-        skip: int = Query(0),
-        limit: int = Query(20),
-    ) -> str:
-        """获取某用户的帖子"""
-        posts = await self._get(f"/api/users/{username}/posts", params={"skip": skip, "limit": limit})
-        return self._render(
-            "components/post_list.html",
-            data=posts,
-            current_user_id=self.current_user_id,
-            current_feed="global",
-        )
-
-    @get("/{username}/followers", auth="token")
-    async def get_followers(self, username: str) -> str:
-        """获取粉丝列表"""
-        users = await self._get(f"/api/users/{username}/followers")
-        return self._render("components/user_card.html", data=users, list_type="粉丝")
-
-    @get("/{username}/following", auth="token")
-    async def get_following(self, username: str) -> str:
-        """获取关注列表"""
-        users = await self._get(f"/api/users/{username}/following")
-        return self._render("components/user_card.html", data=users, list_type="关注")
+    # 纯透传 → CrudAction 声明式
+    profile = CrudAction(
+        backend="/api/users/{username}",
+        template="components/profile_header.html",
+        auth="optional",
+        path="/{username}/profile",
+    )
+    posts = CrudAction(
+        backend="/api/users/{username}/posts",
+        template="components/post_list.html",
+        auth="optional",
+        path="/{username}/posts",
+        template_context={"current_feed": "global"},
+    )
+    followers = CrudAction(
+        backend="/api/users/{username}/followers",
+        template="components/user_card.html",
+        auth="token",
+        path="/{username}/followers",
+        template_context={"list_type": "粉丝"},
+    )
+    following = CrudAction(
+        backend="/api/users/{username}/following",
+        template="components/user_card.html",
+        auth="token",
+        path="/{username}/following",
+        template_context={"list_type": "关注"},
+    )
 
 
 class FriendBFF(BFFBase):
-    """好友业务 BFF"""
+    """好友业务 BFF — CrudAction 声明式写法"""
     prefix = "/bff/friends"
 
-    @get("/requests", auth="token")
-    async def get_pending_requests(self) -> str:
-        """获取待处理好友请求"""
-        requests = await self._get("/api/friends/requests")
-        return self._render("components/friend_request_list.html", data=requests)
-
-    @post("/requests/{username}", auth="token")
-    async def send_request(self, username: str) -> str:
-        """发送好友请求，返回更新后的好友按钮"""
-        await self._post(f"/api/friends/requests/{username}", {})
-        return self._render("components/friend_button.html", status="pending", username=username)
-
-    @put("/requests/{request_id}", auth="token")
-    async def respond_request(
-        self,
-        request_id: int,
-        action: str = Form(...),
-    ) -> str:
-        """接受/拒绝好友请求"""
-        await self._put(f"/api/friends/requests/{request_id}", {"action": action})
-        requests = await self._get("/api/friends/requests")
-        return self._render("components/friend_request_list.html", data=requests)
-
-    @get("/status/{username}", auth="token")
-    async def get_friend_status(self, username: str) -> str:
-        """获取好友关系状态按钮"""
-        result = await self._get(f"/api/friends/status/{username}")
-        return self._render("components/friend_button.html", status=result["status"], username=username)
+    list = CrudAction(
+        backend="/api/friends/requests",
+        template="components/friend_request_list.html",
+        auth="token",
+        path="/requests",
+    )
+    send = CrudAction(
+        backend="/api/friends/requests/{username}",
+        method="POST",
+        template="components/friend_button.html",
+        auth="token",
+        path="/requests/{username}",
+        template_context={"status": "pending"},
+    )
+    respond = CrudAction(
+        backend="/api/friends/requests/{request_id}",
+        method="PUT",
+        refresh="list",
+        auth="token",
+        path="/requests/{request_id}",
+    )
+    status = CrudAction(
+        backend="/api/friends/status/{username}",
+        template="components/friend_button.html",
+        auth="token",
+        path="/status/{username}",
+    )

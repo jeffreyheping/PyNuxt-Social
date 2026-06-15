@@ -8,7 +8,7 @@ from sqlalchemy import (
     UniqueConstraint, Index
 )
 from sqlalchemy.orm import relationship
-from datetime import datetime
+from datetime import datetime, timezone
 
 from database import Base
 
@@ -22,7 +22,7 @@ class User(Base):
     email = Column(String(100), unique=True, nullable=False, index=True)
     display_name = Column(String(100), nullable=True)
     password_hash = Column(String(255), nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=datetime.now(timezone.utc))
 
     # 反向引用
     posts = relationship("Post", back_populates="author", cascade="all, delete-orphan")
@@ -43,7 +43,7 @@ class Post(Base):
     id = Column(Integer, primary_key=True, index=True)
     author_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     content = Column(String(280), nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    created_at = Column(DateTime, default=datetime.now(timezone.utc), index=True)
 
     author = relationship("User", back_populates="posts")
     likes = relationship("Like", back_populates="post", cascade="all, delete-orphan")
@@ -81,8 +81,8 @@ class FriendRequest(Base):
     from_user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     to_user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     status = Column(String(20), nullable=False, default="pending")  # pending | accepted | rejected
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=datetime.now(timezone.utc), onupdate=datetime.now(timezone.utc))
 
     from_user = relationship("User", foreign_keys=[from_user_id], back_populates="sent_requests")
     to_user = relationship("User", foreign_keys=[to_user_id], back_populates="received_requests")

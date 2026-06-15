@@ -1,8 +1,9 @@
 # PyNuxt-Social 代码审查 & 实施计划
 
 > 审查日期：2026-06-05
+> 最近更新：2026-06-15
 > 审查范围：frontend/ + backend/ 核心模块
-> 总体评价：架构设计优秀，主要生产障碍为 N+1 查询问题
+> 总体评价：架构设计优秀，P0/P1 核心问题已全部修复
 
 ---
 
@@ -10,11 +11,11 @@
 
 按优先级和依赖关系，分成三个阶段实施：
 
-| 阶段 | 目标 | 关键任务 |
-|------|------|---------|
-| **第一阶段：稳定性** | 修复生产问题，替换不可靠依赖 | N+1 查询、datetime 弃用、配置管理 |
-| **第二阶段：体验优化** | 提升开发体验和用户体验 | 引入 Alpine.js、修复 Feed Tab 同步、环境变量 |
-| **第三阶段：框架升级** | 参考 FastBlocks 改进框架 | CSRF 中间件、HTMX 响应类、响应压缩 |
+| 阶段 | 目标 | 关键任务 | 状态 |
+|------|------|---------|------|
+| **第一阶段：稳定性** | 修复生产问题，替换不可靠依赖 | N+1 查询、datetime 弃用、配置管理 | ✅ 核心完成 |
+| **第二阶段：体验优化** | 提升开发体验和用户体验 | 引入 Alpine.js、修复 Feed Tab 同步、隐藏邮箱 | ✅ 核心完成 |
+| **第三阶段：框架升级** | 参考 FastBlocks 改进框架 | CSRF 中间件、HTMX 响应类、响应压缩 | 🔲 待启动 |
 
 ---
 
@@ -22,67 +23,25 @@
 
 ### P0 — 必须修复（影响生产稳定性）
 
-#### P0-1: N+1 查询问题
+#### ~~P0-1: N+1 查询问题~~ ✅ 已修复
 
-**位置**：[backend/routers/posts.py#L44-65](backend/routers/posts.py#L44-65)
+**位置**：[backend/routers/posts.py](backend/routers/posts.py)
 
-**问题**：`_serialize_post` 每条帖子执行 3 次独立查询，20 条帖子 = 60+ SQL。
+**修复内容**（2026-06-15）：
+- 删除 `_serialize_post()`（每条帖子 3 次 SQL）
+- 新增 `_serialize_post_fast(post, authors, likes_by_post, current_user_id)`（零查询）
+- 新增 `_batch_serialize_posts(posts, db, current_user_id)`（2 次批量查询覆盖全部帖子）
+- `get_posts` 和 `get_user_posts` 均已改用批量序列化
 
-```python
-def _serialize_post(post: Post, current_user, db):
-    like_count = db.query(Like).filter(Like.post_id == post.id).count()       # SQL 1
-    liked_by_me = db.query(Like).filter(...).first()                           # SQL 2
-    author = db.query(User).filter(User.id == post.author_id).first()           # SQL 3
-```
-
-**修复方案**：在 `get_posts` 里批量查询
-
-```python
-def get_posts(...):
-    posts = db.query(Post).order_by(...).all()
-
-    # 批量查询作者
-    author_ids = {p.author_id for p in posts}
-    authors = {u.id: u for u in db.query(User).filter(User.id.in_(author_ids)).all()}
-
-    # 批量查询点赞
-    post_ids = [p.id for p in posts]
-    likes = db.query(Like).filter(Like.post_id.in_(post_ids)).all()
-
-    # 按 post_id 分组
-    likes_by_post = {}
-    for l in likes:
-        likes_by_post.setdefault(l.post_id, []).append(l)
-
-    # 构造响应
-    return [_serialize_post_fast(p, authors, likes_by_post, current_user) for p in posts]
-```
-
-**影响**：20 条帖子页面加载从 60+ SQL 降至 ~4 SQL。
+**效果**：20 条帖子页面加载从 60+ SQL 降至 ~4 SQL。
 
 ---
 
-#### P0-2: `datetime.utcnow()` 已弃用
+#### ~~P0-2: `datetime.utcnow()` 已弃用~~ ✅ 已修复
 
-**位置**：
-- [backend/models.py#L25](backend/models.py#L25) — `User.created_at`
-- [backend/models.py#L46](backend/models.py#L46) — `Post.created_at`
-- [backend/models.py#L85](backend/models.py#L85) — `FriendRequest.created_at/updated_at`
-- [backend/routers/auth.py#L74](backend/routers/auth.py#L74) — JWT 过期时间
-
-**问题**：Python 3.12+ 已弃用 `datetime.utcnow()`，会产生 DeprecationWarning。
-
-**修复方案**：统一改为 `datetime.now(timezone.utc)`
-
-```python
-from datetime import datetime, timezone
-
-# models.py
-created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
-
-# auth.py
-expire = datetime.now(timezone.utc) + timedelta(hours=JWT_EXPIRATION_HOURS)
-```
+**修复内容**（2026-06-15）：
+- `backend/models.py`：`User.created_at`、`Post.created_at`、`FriendRequest.created_at/updated_at` 均改为 `datetime.now(timezone.utc)`
+- `backend/routers/auth.py`：JWT 过期时间改为 `datetime.now(timezone.utc)`
 
 ---
 
@@ -93,35 +52,21 @@ expire = datetime.now(timezone.utc) + timedelta(hours=JWT_EXPIRATION_HOURS)
 ---
 ### P1 — 强烈建议修复（影响正确性/安全性/体验）
 
-#### P1-1: 公开 API 泄漏用户邮箱
+#### ~~P1-1: 公开 API 泄漏用户邮箱~~ ✅ 已修复
 
-**位置**：[backend/routers/users.py](backend/routers/users.py)
-
-**问题**：`GET /api/users/{username}` 响应包含 `email` 字段，隐私泄漏。
-
-**修复方案**：创建 `UserPublicResponse` 排除 email
-
-```python
-class UserPublicResponse(BaseModel):
-    id: int
-    username: str
-    display_name: Optional[str]
-    created_at: datetime
-    post_count: int
-    follower_count: int
-    following_count: int
-    # email 已移除
-```
+**修复内容**（2026-06-15）：
+- 新增 `UserPublicResponse`（id, username, display_name, created_at，不含 email）
+- 新增 `UserProfileResponse(UserPublicResponse)`（+ post_count, follower_count, following_count）
+- `GET /api/users/{username}` 添加 `response_model=UserProfileResponse` 约束
 
 ---
 
-#### P1-2: Feed Tab 与发帖表单不同步
+#### ~~P1-2: Feed Tab 与发帖表单不同步~~ ✅ 已修复
 
-**位置**：[frontend/pages/feed.html#L7](frontend/pages/feed.html#L7)
-
-**问题**：发帖表单 hardcode `feed=global`，用户切换到"关注" Tab 后发帖，实际发到全局流。
-
-**修复方案**：结合 Alpine.js 动态同步 Tab 状态
+**修复内容**（2026-06-15）：
+- 引入 Alpine.js `x-data="{ tab: 'global', content: '' }"` 管理 Tab 状态
+- `<input type="hidden" name="feed" :value="tab">` 动态同步 Tab 到表单
+- Tab 高亮通过 `:class` 声明式绑定
 
 ---
 
@@ -175,60 +120,17 @@ def get_settings():
 
 ---
 
-#### P1-5: 引入 Alpine.js 提升客户端交互体验
+#### ~~P1-5: 引入 Alpine.js 提升客户端交互体验~~ ✅ 已完成
 
-**位置**：[frontend/layouts/default.html](frontend/layouts/default.html)
-
-**目标**：
-- 解决 Feed Tab 同步问题
-- 添加字数实时统计
-- 避免手动"粘合" HTMX 和状态
-
-**实施步骤**：
-1. 在 `default.html` 引入 Alpine.js
-2. 重构 `feed.html`，用 `x-data` 管理状态
-3. 动态同步 `feed` 参数和 Tab 高亮
-
-```html
-<!-- 引入 -->
-<script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
-
-<!-- feed.html 重构 -->
-<div x-data="{ tab: 'global', content: '' }">
-    <div class="tabs">
-        <a 
-            :class="{'tab active': tab === 'global', 'tab': tab !== 'global'}"
-            @click="tab = 'global'"
-            hx-get="/bff/posts?feed=global"
-            hx-target="#post-list"
-        >
-            全局
-        </a>
-        <a 
-            :class="{'tab active': tab === 'following', 'tab': tab !== 'following'}"
-            @click="tab = 'following'"
-            hx-get="/bff/posts?feed=following"
-            hx-target="#post-list"
-        >
-            关注
-        </a>
-    </div>
-
-    <form 
-        hx-post="/bff/posts" 
-        hx-target="#post-list"
-        hx-vals="{'feed': tab}"
-    >
-        <textarea 
-            name="content" 
-            x-model="content"
-            maxlength="280"
-        ></textarea>
-        <span x-text="280 - content.length + ' 字剩余'"></span>
-        <button type="submit" :disabled="content.trim() === ''">发布</button>
-    </form>
-</div>
-```
+**实施内容**（2026-06-15）：
+1. `frontend/static/js/alpine.min.js`（v3.14.8，44758 bytes）本地化，与 htmx.min.js 并列
+2. `frontend/layouts/default.html` 引入 Alpine.js（`defer`）
+3. `frontend/pages/feed.html` 用 `x-data` 重构：
+   - Tab 高亮：`@click.prevent="tab = 'global'"` + `:class` 绑定
+   - 字数统计：`x-text="280 - content.length + ' 字剩余'"`
+   - 空内容禁发：`:disabled="!content.trim()"`
+   - 发帖后清空：`hx-swap="outerHTML"` 替换整个 `#feed-content` 区块，Alpine 状态随 DOM 重建自然归零
+4. `frontend/components/feed_content.html` 新增，包裹表单 + Tab + 帖子列表，供 outerHTML swap 使用
 
 ---
 
@@ -273,7 +175,7 @@ load_dotenv()
 ```ini
 # .env 文件（项目根目录）
 JWT_SECRET=pynuxt-social-dev-secret-change-in-prod
-API_BASE=http://localhost:8012
+API_BASE=http://localhost:8000
 DEBUG=True
 ```
 
@@ -285,7 +187,12 @@ DEBUG=True
 
 #### P3-2: 无删除/编辑帖子功能
 
-#### P3-3: BFFBase 克隆模式历史包袱
+#### P3-3: ~~BFFBase 克隆模式历史包袱~~ ✅ 已清理
+
+**清理内容**（2026-06-15）：
+- 删除 `BFFBase.__init__(self, api_base)`，改为 `register()` 中 `BFFBase._api_base = api_base.rstrip("/")`
+- `register()` 不再返回实例（旧返回值用于克隆模式链式调用）
+- 模块文档重写，移除 v0.4/v0.5 变更日志，替换为核心机制说明
 
 #### P3-4: 模板渲染升级为异步（可选）
 
@@ -319,67 +226,17 @@ def PostItem(post, current_user_id=None):
     )
 ```
 
-#### P3-6: BFF 声明式路由（减少 50% BFF 代码）
+#### ~~P3-6: BFF 声明式路由~~ ✅ 已实现
 
-**位置**：[frontend/bff_core.py](frontend/bff_core.py)
+**位置**：[frontend/pynuxt/bff.py](frontend/pynuxt/bff.py)
 
-**问题**：每个 BFF 方法都是"调后端 API → 渲染模板"的固定模式，但每次手写，代码重复度高。
-
-**当前写法**（每个方法 ~15 行）：
-```python
-class FeedBFF(BFFBase):
-    prefix = "/bff/posts"
-
-    @get("", auth="optional")
-    async def get_posts(self, feed: str = Query("global")):
-        posts = await self._get("/api/posts", params={"feed": feed})
-        return self._render("components/post_list.html", data=posts, current_user_id=self.current_user_id, current_feed=feed)
-
-    @post("", auth="required")
-    async def create_post(self, content: str = Form(...), feed: str = Query("global")):
-        await self._post("/api/posts", {"content": content})
-        posts = await self._get("/api/posts", params={"feed": feed})
-        return self._render("components/post_list.html", data=posts, current_user_id=self.current_user_id, current_feed=feed)
-
-    @post("/{post_id}/like", auth="token")
-    async def toggle_like(self, post_id: int):
-        result = await self._post(f"/api/posts/{post_id}/like", {})
-        return self._render("components/like_button.html", post_id=post_id, liked=result["liked"], like_count=result["like_count"])
-```
-
-**声明式写法**（每个动作 3 行）：
-```python
-class FeedBFF(BFFBase):
-    prefix = "/bff/posts"
-
-    list = CrudAction(
-        backend="/api/posts",
-        template="components/post_list.html",
-        auth="optional",
-    )
-    create = CrudAction(
-        backend="/api/posts",
-        refresh="list",  # 创建后自动刷新列表
-        auth="required",
-    )
-    like = CrudAction(
-        backend="/api/posts/{post_id}/like",
-        template="components/like_button.html",
-        auth="token",
-    )
-```
-
-**CrudAction 自动生成**：
-- 路由方法（`@get`/`@post`/`@put`/`@delete`）
-- 后端 API 调用（`self._get`/`self._post`）
-- 模板渲染（`self._render`）
-- 创建后刷新列表（`refresh="list"` 自动重新调用 list action）
-
-**收益**：
-- FeedBFF 从 ~40 行降到 ~15 行
-- FriendBFF 从 ~30 行降到 ~12 行
-- 新增 CRUD 时 BFF 代码量减半
-- 统一模式，减少出错
+**实现内容**（2026-06-15）：
+- 新增 `CrudAction` 类：`backend`, `method`, `path`, `template`, `refresh`, `auth`, `template_context`
+- 新增 `_build_crud_handler()`：自动提取路径参数 `{param}`，构建 `inspect.Signature`，生成路由处理函数
+- `register()` 同时扫描 `@get/@post` 装饰方法和 `CrudAction` 类属性
+- `FriendBFF` 已用 CrudAction 重写（4 个声明替代 4 个 async 方法）
+- 上下文合并规则：后端 dict 展开 → 路径参数注入 → `template_context` 覆盖（最高优先级）
+- `refresh="list"` 模式：先调后端 → 再执行另一 CrudAction 的后端调用 + 模板渲染
 
 ---
 
@@ -408,7 +265,7 @@ app.add_middleware(GZipMiddleware, minimum_size=1000)
 3. **内网通信跳过 DNS**：`localhost` → `127.0.0.1`
 ```python
 # frontend/config.py
-API_BASE = "http://127.0.0.1:8012"
+API_BASE = "http://127.0.0.1:8000"
 ```
 
 **为什么不用 gRPC/GraphQL？**
@@ -451,18 +308,19 @@ API_BASE = "http://127.0.0.1:8012"
 
 ## 五、分阶段任务清单
 
-### 第一阶段：稳定性（2-3 天）
+### 第一阶段：稳定性 ✅ 核心完成
 
-- [ ] 修复 N+1 查询问题
-- [ ] 替换 `datetime.utcnow()` 为 `datetime.now(timezone.utc)`
+- [x] 修复 N+1 查询问题 → `_batch_serialize_posts()`
+- [x] 替换 `datetime.utcnow()` 为 `datetime.now(timezone.utc)`
 - [ ] 配置管理替换为 pydantic-settings
 
-### 第二阶段：体验优化（1-2 天）
+### 第二阶段：体验优化 ✅ 核心完成
 
-- [ ] 隐藏公开 API 的 email 字段
+- [x] 隐藏公开 API 的 email 字段 → `UserPublicResponse` / `UserProfileResponse`
+- [x] 引入 Alpine.js 并重构 feed.html（Tab 同步、字数统计、空内容禁发、outerHTML 清空表单）
+- [x] 修复 API_BASE 端口配置错误（8012 → 8000）
 - [ ] 修复 `_user_cache` 全局变量问题
 - [ ] 引入 python-dotenv + .env 文件
-- [ ] 引入 Alpine.js 并重构 feed.html
 
 ### 第三阶段：框架升级（可选，按需求）
 
@@ -471,5 +329,26 @@ API_BASE = "http://127.0.0.1:8012"
 - [ ] 添加响应压缩
 - [ ] 重构中间件架构
 - [ ] 用 Python 函数（类似 fasthtml FastTags）重构 components
-- [ ] BFF 声明式路由（CrudAction 模式，减少 50% BFF 代码）
+- [x] BFF 声明式路由（CrudAction 模式，减少 50% BFF 代码）→ `CrudAction` 类已实现
+- [x] BFFBase 克隆模式历史清理 → `__init__` 删除，`register()` 重构
 - [ ] BFF ↔ 后端 REST 通信优化（HTTP/2 + Gzip + 跳过 DNS）
+
+---
+
+## 六、v0.5.1 → v0.6 变更日志
+
+> 2026-06-15
+
+### 新特性
+- **Alpine.js 集成**：本地化 `alpine.min.js`（v3.14.8）到 `static/js/`，Tab 同步、字数统计、空内容禁发
+- **CrudAction 声明式路由**：`CrudAction` 类 + `_build_crud_handler()` 自动生成 BFF 路由
+- **outerHTML swap 模式**：`feed_content.html` 组件，发帖后表单自动清空
+
+### 修复
+- **N+1 查询**：`_batch_serialize_posts()` 批量序列化，20 条帖子 60+ SQL → ~4 SQL
+- **邮箱泄漏**：`UserPublicResponse` / `UserProfileResponse` 排除 email，`response_model` 约束
+- **datetime 弃用**：`datetime.utcnow()` → `datetime.now(timezone.utc)`（models.py + auth.py）
+- **API_BASE 端口错误**：`config.py` 默认值从 8012 修正为 8000
+
+### 清理
+- **BFFBase 克隆模式**：删除 `__init__(api_base)`，`register()` 不再返回实例，模块文档重写
