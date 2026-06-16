@@ -35,7 +35,7 @@ class ProfileFrame(ttk.Frame):
                 posts = self.app.api.get_user_posts(username)
                 self.after(0, lambda: self._render(profile, posts))
             except Exception as e:
-                self.after(0, lambda: messagebox.showerror("加载失败", str(e)))
+                self.after(0, lambda e=e: messagebox.showerror("加载失败", str(e)))
 
         threading.Thread(target=_load, daemon=True).start()
 

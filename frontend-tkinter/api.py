@@ -1,7 +1,7 @@
 """API 客户端 — 同步版本（Tkinter 主线程不能用 async）"""
 import httpx
 
-API_BASE = "http://localhost:8000"
+API_BASE = "http://localhost:8012"
 
 
 class ApiClient:

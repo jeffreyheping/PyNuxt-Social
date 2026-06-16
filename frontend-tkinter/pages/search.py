@@ -41,7 +41,7 @@ class SearchFrame(ttk.Frame):
                 users = self.app.api.search_users(q)
                 self.after(0, lambda: self._render_results(users))
             except Exception as e:
-                self.after(0, lambda: messagebox.showerror("搜索失败", str(e)))
+                self.after(0, lambda e=e: messagebox.showerror("搜索失败", str(e)))
 
         threading.Thread(target=_search, daemon=True).start()
 

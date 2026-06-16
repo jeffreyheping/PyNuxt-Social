@@ -32,7 +32,7 @@ class FriendsFrame(ttk.Frame):
                 requests = self.app.api.get_friend_requests()
                 self.after(0, lambda: self._render(requests))
             except Exception as e:
-                self.after(0, lambda: messagebox.showerror("加载失败", str(e)))
+                self.after(0, lambda e=e: messagebox.showerror("加载失败", str(e)))
 
         threading.Thread(target=_load, daemon=True).start()
 
